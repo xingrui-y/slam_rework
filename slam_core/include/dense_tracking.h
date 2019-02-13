@@ -9,19 +9,25 @@
 class DenseTracker
 {
 public:
+  struct Result
+  {
+    Sophus::SE3d result;
+  };
+
   struct Context
   {
-    int level_start, level_end;
-    std::vector<int> max_iteration_per_level;
-    std::vector<double> stopping_criteria;
+    unsigned int levels;
+    bool use_initial_estimate;
+    Sophus::SE3d initial_estimate;
+    std::vector<int> max_iterations;
   };
 
   DenseTracker();
-  Sophus::SE3d match(RgbdImagePyramid &reference, RgbdImagePyramid &target);
+  Result match(RgbdImagePyramidPtr reference, RgbdImagePyramidPtr target, const Context &c);
 
 private:
   class DenseTrackerImpl;
-  std::unique_ptr<DenseTrackerImpl> impl;
+  std::shared_ptr<DenseTrackerImpl> impl;
 };
 
 typedef std::shared_ptr<DenseTracker> DenseTrackerPtr;

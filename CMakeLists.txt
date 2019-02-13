@@ -1,20 +1,13 @@
-cmake_minimum_required(VERSION 3.1)
-project("Ceres-SLAM")
-SET(CMAKE_CXX_STANDARD 11)
+cmake_minimum_required(VERSION 3.4)
+project(slam VERSION 0.1.0 LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 11)
 
-find_package(Ceres 2.0 REQUIRED)
-find_package(Eigen3 3.2 REQUIRED)
-find_package(OpenCV 3.4 REQUIRED)
+add_subdirectory(slam_core)
+add_subdirectory(slam_app)
+add_subdirectory(slam_gui)
 
-message(STATUS ${OpenCV_INCLUDE_DIRS})
+add_executable(tum_app src/tum_test.cpp)
+target_link_libraries(tum_app slam_core slam_gui slam_app)
 
-include_directories(include)
-include_directories(${EIGEN_INCLUDE_DIRS})
-include_directories(${CERES_INCLUDE_DIRS})
-include_directories(${OpenCV_INCLUDE_DIRS})
-
-file(GLOB source_files src/*.cpp)
-add_executable(${PROJECT_NAME} ${source_files})
-
-target_link_libraries(${PROJECT_NAME} ${CERES_LIBRARIES})
-target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBRARIES})
+add_executable(live_system src/live_system.cpp)
+target_link_libraries(live_system slam_core slam_gui slam_app)

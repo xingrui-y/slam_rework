@@ -7,11 +7,13 @@
 class DenseOdometry
 {
 public:
+
   DenseOdometry();
+  void track(const cv::Mat &intensity, const cv::Mat &depth);
 
 private:
   class DenseOdometryImpl;
-  std::unique_ptr<DenseOdometryImpl> impl;
+  std::shared_ptr<DenseOdometryImpl> impl;
 };
 
 typedef std::shared_ptr<DenseOdometry> DenseOdometryPtr;
