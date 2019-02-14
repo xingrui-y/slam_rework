@@ -4,8 +4,7 @@ add_library(${PROJECT_NAME} SHARED "")
 
 target_include_directories(${PROJECT_NAME}
 PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
 target_sources(${PROJECT_NAME}
@@ -13,10 +12,10 @@ PRIVATE
     src/pangolin_gui.cpp
 )
 
-find_package(Eigen3 3.2 REQUIRED)
-find_package(OpenGL 2.0 REQUIRED)
-find_package(Pangolin REQUIRED)
+target_link_libraries(${PROJECT_NAME} 
+    Eigen3::Eigen
+    ${OpenGL_LIBRARIES}
+    ${Pangolin_LIBRARIES}
+)
 
-target_link_libraries(${PROJECT_NAME} Eigen3::Eigen)
-target_link_libraries(${PROJECT_NAME} ${OpenGL_LIBRARIES})
-target_link_libraries(${PROJECT_NAME} ${Pangolin_LIBRARIES})
+set(${PROJECT_NAME}_INCLUDE_DIRS ${PROJECT_SOURCE_DIR}/include CACHE INTERNAL "" FORCE)

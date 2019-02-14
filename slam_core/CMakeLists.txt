@@ -4,8 +4,7 @@ add_library(${PROJECT_NAME} SHARED "")
 
 target_include_directories(${PROJECT_NAME}
 PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
 target_sources(${PROJECT_NAME}
@@ -17,10 +16,10 @@ PRIVATE
     src/keyframe_graph.cpp
 )
 
-find_package(Ceres 2.0 REQUIRED)
-find_package(Eigen3 3.2 REQUIRED)
-find_package(OpenCV 3.4 REQUIRED)
+target_link_libraries(${PROJECT_NAME} 
+    Eigen3::Eigen
+    ${CERES_LIBRARIES}
+    ${OpenCV_LIBRARIES}
+)
 
-target_link_libraries(${PROJECT_NAME} Eigen3::Eigen)
-target_link_libraries(${PROJECT_NAME} ${CERES_LIBRARIES})
-target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBRARIES})
+set(${PROJECT_NAME}_INCLUDE_DIRS ${PROJECT_SOURCE_DIR}/include CACHE INTERNAL "" FORCE)

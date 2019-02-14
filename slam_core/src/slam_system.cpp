@@ -2,8 +2,8 @@
 
 class SlamSystem::SlamSystemImpl
 {
-  public:
-    SlamSystemImpl();
+public:
+  SlamSystemImpl();
 };
 
 SlamSystem::SlamSystemImpl::SlamSystemImpl()
@@ -11,5 +11,9 @@ SlamSystem::SlamSystemImpl::SlamSystemImpl()
 }
 
 SlamSystem::SlamSystem() : impl(new SlamSystemImpl())
+{
+}
+
+void SlamSystem::set_new_images(const cv::Mat &intensity, const cv::Mat &depth)
 {
 }

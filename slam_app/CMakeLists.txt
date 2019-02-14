@@ -1,20 +1,13 @@
 project(slam_app)
 
-add_library(${PROJECT_NAME} SHARED "")
-
-target_include_directories(${PROJECT_NAME}
-PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
+set(COMMON_SRC 
+    src/openni_camera
+    src/tum_dataset_wrapper.cpp
 )
 
-target_sources(${PROJECT_NAME}
-    PRIVATE
-        src/tum_dataset_wrapper.cpp
-)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+include_directories(${slam_core_INCLUDE_DIRS})
+include_directories(${slam_gui_INCLUDE_DIRS})
 
-find_package(OpenCV 3.4 REQUIRED)
-find_package(Eigen3 3.2 REQUIRED)
-
-target_link_libraries(${PROJECT_NAME} Eigen3::Eigen)
-target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBRARIES})
+add_executable(tum_app src/tum_test.cpp ${COMMON_SRC})
+target_link_libraries(tum_app slam_core slam_gui)
