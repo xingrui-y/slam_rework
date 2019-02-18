@@ -11,16 +11,17 @@ class PangolinGUI::PangolinGUIImpl
     pangolin::OpenGlRenderState camera;
     pangolin::View model_view_camera;
     pangolin::View main_menu_panel;
+
     pangolin::Var<bool> *btn_system_reset;
+    pangolin::Var<bool> *btn_system_reboot;
 };
 
 PangolinGUI::PangolinGUIImpl::PangolinGUIImpl(int width, int height)
 {
     pangolin::CreateWindowAndBind("slam", width, height);
+
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
-
-    std::string config_file_path;
 
     camera = pangolin::OpenGlRenderState(pangolin::ProjectionMatrix(width, height, 528.f, 528.f, 320.f, 240.f, 0.1f, 100.f),
                                          pangolin::ModelViewLookAtRUB(0.f, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f, -1.f, 0.f));
@@ -29,6 +30,7 @@ PangolinGUI::PangolinGUIImpl::PangolinGUIImpl(int width, int height)
 
     main_menu_panel = pangolin::CreatePanel("MainUI").SetBounds(0, 1.0, 0, pangolin::Attach::Pix(200), true);
     btn_system_reset = new pangolin::Var<bool>("MainUI.Reset System", false, false);
+    btn_system_reboot = new pangolin::Var<bool>("MainUI.Reboot System", false, false);
 }
 
 void PangolinGUI::PangolinGUIImpl::draw_frame()
@@ -42,6 +44,11 @@ void PangolinGUI::PangolinGUIImpl::draw_frame()
 bool PangolinGUI::PangolinGUIImpl::should_quit() const
 {
     return pangolin::ShouldQuit();
+}
+
+PangolinGUI::PangolinGUI() : PangolinGUI(640, 480)
+{
+
 }
 
 PangolinGUI::PangolinGUI(int width, int height)

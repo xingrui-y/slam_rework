@@ -2,11 +2,11 @@
 
 TUMDatasetWrapper::TUMDatasetWrapper(std::string dir) : id(0), base_dir(dir)
 {
-	if(base_dir.back() != '/')
+	if (base_dir.back() != '/')
 		base_dir += '/';
 }
 
-void TUMDatasetWrapper::load_association_file(std::string file_name)
+bool TUMDatasetWrapper::load_association_file(std::string file_name)
 {
 	std::ifstream file;
 	file.open(base_dir + file_name, std::ios_base::in);
@@ -14,7 +14,7 @@ void TUMDatasetWrapper::load_association_file(std::string file_name)
 	double ts;
 	std::string name_depth, name_image;
 
-	while(file >> ts >> name_image >> ts >> name_depth)
+	while (file >> ts >> name_image >> ts >> name_depth)
 	{
 		image_list.push_back(name_image);
 		depth_list.push_back(name_depth);
@@ -23,17 +23,26 @@ void TUMDatasetWrapper::load_association_file(std::string file_name)
 
 	file.close();
 
-	printf("Total of %lu Images Loaded.\n", depth_list.size());
+	if (depth_list.size() == 0)
+	{
+		std::cout << "Reading images failed, please check your directory.\n";
+		return false;
+	}
+	else
+	{
+		printf("Total of %lu Images Loaded.\n", depth_list.size());
+		return true;
+	}
 }
 
 int TUMDatasetWrapper::find_closest_index(std::vector<double> list, double time) const
 {
 	int idx = -1;
 	double min_val = std::numeric_limits<double>::max();
-	for(int i = 0; i < list.size(); ++i)
+	for (int i = 0; i < list.size(); ++i)
 	{
 		double d = std::abs(list[i] - time);
-		if(d < min_val)
+		if (d < min_val)
 		{
 			idx = i;
 			min_val = d;
@@ -44,7 +53,7 @@ int TUMDatasetWrapper::find_closest_index(std::vector<double> list, double time)
 
 void TUMDatasetWrapper::load_ground_truth(std::string file_name)
 {
-	if(time_stamp.size() == 0)
+	if (time_stamp.size() == 0)
 	{
 		printf("Please load images first!\n");
 		return;
@@ -56,7 +65,7 @@ void TUMDatasetWrapper::load_ground_truth(std::string file_name)
 	std::ifstream file;
 	file.open(base_dir + file_name);
 
-	for(int i = 0; i < 3; ++i)
+	for (int i = 0; i < 3; ++i)
 	{
 		std::string line;
 		std::getline(file, line);
@@ -64,7 +73,7 @@ void TUMDatasetWrapper::load_ground_truth(std::string file_name)
 
 	std::vector<double> ts_gt;
 	std::vector<Sophus::SE3d> vgt;
-	while(file >> ts >> tx >> ty >> tz >> qx >> qy >> qz >> qw)
+	while (file >> ts >> tx >> ty >> tz >> qx >> qy >> qz >> qw)
 	{
 		Eigen::Quaterniond q(qw, qx, qy, qz);
 		q.normalize();
@@ -75,8 +84,8 @@ void TUMDatasetWrapper::load_ground_truth(std::string file_name)
 		ts_gt.push_back(ts);
 		vgt.push_back(gt);
 	}
-	
-	for(int i = 0; i < time_stamp.size(); ++i)
+
+	for (int i = 0; i < time_stamp.size(); ++i)
 	{
 		double time = time_stamp[i];
 		int idx = find_closest_index(ts_gt, time);
@@ -88,9 +97,9 @@ void TUMDatasetWrapper::load_ground_truth(std::string file_name)
 	printf("Total of %lu Ground Truth Data Loaded.\n", ground_truth.size());
 }
 
-bool TUMDatasetWrapper::read_next_images(cv::Mat& image, cv::Mat& depth)
+bool TUMDatasetWrapper::read_next_images(cv::Mat &image, cv::Mat &depth)
 {
-	if(id >= image_list.size())
+	if (id >= image_list.size())
 		return false;
 
 	std::string fullpath_image = base_dir + image_list[id];
@@ -109,19 +118,19 @@ void TUMDatasetWrapper::save_full_trajectory(std::vector<Sophus::SE3d> full_traj
 	std::string file_path = base_dir + file_name;
 	file.open(file_path, std::ios_base::out);
 
-	for(int i = 0; i < full_trajectory.size(); ++i)
+	for (int i = 0; i < full_trajectory.size(); ++i)
 	{
-		if(i >= time_stamp.size())
+		if (i >= time_stamp.size())
 			break;
 
 		double ts = time_stamp[i];
-		Sophus::SE3d& curr = full_trajectory[i];
+		Sophus::SE3d &curr = full_trajectory[i];
 		Eigen::Vector3d t = curr.translation();
 		Eigen::Quaterniond q(curr.rotationMatrix());
 
 		file << std::fixed
 			 << std::setprecision(4)
-		     << ts << " "
+			 << ts << " "
 			 << t(0) << " "
 			 << t(1) << " "
 			 << t(2) << " "

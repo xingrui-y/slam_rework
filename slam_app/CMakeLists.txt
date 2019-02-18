@@ -1,13 +1,17 @@
-project(slam_app)
+project(slam)
 
 set(COMMON_SRC 
     src/openni_camera
     src/tum_dataset_wrapper.cpp
+    src/program_options.cpp
+    src/slam_gui_wrapper.cpp
 )
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 include_directories(${slam_core_INCLUDE_DIRS})
 include_directories(${slam_gui_INCLUDE_DIRS})
+include_directories(${slam_util_INCLUDE_DIRS})
 
-add_executable(tum_app src/tum_test.cpp ${COMMON_SRC})
-target_link_libraries(tum_app slam_core slam_gui)
+add_executable(${PROJECT_NAME} app/slam_app.cpp ${COMMON_SRC})
+target_link_libraries(${PROJECT_NAME} Boost::program_options)
+target_link_libraries(${PROJECT_NAME} slam_core slam_gui slam_util)

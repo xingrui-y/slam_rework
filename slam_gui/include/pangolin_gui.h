@@ -7,6 +7,7 @@
 class PangolinGUI
 {
   public:
+    PangolinGUI();
     PangolinGUI(int width, int height);
 
     bool should_quit() const;

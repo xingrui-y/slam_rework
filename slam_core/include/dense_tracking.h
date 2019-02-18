@@ -12,10 +12,14 @@ public:
   struct Result
   {
     Sophus::SE3d result;
+    float final_log_likelyhood;
+    std::vector<int> iterations_per_level;
+    float residual_sum;
   };
 
   struct Context
   {
+    bool icp_only, rgb_only;
     unsigned int levels;
     bool use_initial_estimate;
     Sophus::SE3d initial_estimate;

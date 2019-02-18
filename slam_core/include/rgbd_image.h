@@ -8,7 +8,12 @@
 class RgbdCamera
 {
 public:
-private:
+  RgbdCamera(float fx, float fy, float cx, float cy);
+  cv::Vec3f back_project_point(int x, int y, float z) const;
+
+  int cols, rows;
+  float cx, cy, fx, fy;
+  float inv_fx, inv_fy;
 };
 
 typedef std::shared_ptr<RgbdCamera> RgbdCameraPtr;
@@ -16,20 +21,23 @@ typedef std::shared_ptr<RgbdCamera> RgbdCameraPtr;
 class RgbdCameraPyramid
 {
 public:
-  RgbdCameraPyramid();
+  RgbdCameraPyramid(int total_level);
+  int get_total_level() const;
+  RgbdCameraPtr operator[](int level) const;
 
 private:
   std::vector<RgbdCameraPtr> levels;
 };
+
+typedef std::shared_ptr<RgbdCameraPyramid> RgbdCameraPyramidPtr;
 
 class RgbdImage
 {
 public:
   RgbdImage();
   void create(const cv::Mat &image, const cv::Mat &depth);
-  void compute_derivatives();
   void compute_intensity_derivatives();
-  void compute_depth_derivatives();
+  void back_project_points(float fx, float fy, float cx, float cy);
 
 private:
   cv::Mat intensity;
@@ -37,6 +45,8 @@ private:
   cv::Mat intensity_dx;
   cv::Mat intensity_dy;
   cv::Mat point_cloud;
+  cv::Mat estimated_normal;
+  RgbdCameraPtr camera;
 };
 
 typedef std::shared_ptr<RgbdImage> RgbdImagePtr;
@@ -44,7 +54,8 @@ typedef std::shared_ptr<RgbdImage> RgbdImagePtr;
 class RgbdImagePyramid
 {
 public:
-  RgbdImagePyramid(const cv::Mat &intensity, const cv::Mat &depth);
+  RgbdImagePyramid(cv::Mat &intensity, cv::Mat &depth, RgbdCameraPyramidPtr cameras);
+  RgbdImagePtr operator[](int level);
 
 private:
   std::vector<RgbdImagePtr> levels;

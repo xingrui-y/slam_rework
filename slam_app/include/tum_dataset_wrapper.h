@@ -10,7 +10,7 @@ class TUMDatasetWrapper
 {
 public:
   TUMDatasetWrapper(std::string dir);
-  void load_association_file(std::string file_name);
+  bool load_association_file(std::string file_name);
   void load_ground_truth(std::string file_name);
   bool read_next_images(cv::Mat &image, cv::Mat &depth);
   std::vector<Sophus::SE3d> get_groundtruth() const;
