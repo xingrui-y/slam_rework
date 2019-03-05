@@ -1,6 +1,6 @@
 #include "tum_dataset_wrapper.h"
 
-TUMDatasetWrapper::TUMDatasetWrapper(std::string dir) : id(0), base_dir(dir)
+TUMDatasetWrapper::TUMDatasetWrapper(std::string dir) : id(0), base_dir(dir), DataSource()
 {
 	if (base_dir.back() != '/')
 		base_dir += '/';

@@ -5,6 +5,7 @@ add_library(${PROJECT_NAME} SHARED "")
 target_sources(${PROJECT_NAME}
 PRIVATE
     src/stop_watch.cpp
+    src/intrinsic_matrix.cpp
 )
 
 target_include_directories(${PROJECT_NAME}

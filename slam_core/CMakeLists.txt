@@ -16,13 +16,20 @@ PRIVATE
     src/dense_tracking.cpp
     src/dense_odometry.cpp
     src/slam_system.cpp
+    src/device_frame.cpp
     src/keyframe_graph.cpp
-    src/intrinsic_matrix.cpp
+    src/pose_struct.cpp
 )
 
 target_link_libraries(${PROJECT_NAME}
+    slam_util
     slam_cuda
     Eigen3::Eigen
+    g2o_core
+    g2o_stuff
+    g2o_types_sba
+    g2o_solver_dense
+    g2o_solver_cholmod
     ${CERES_LIBRARIES}
     ${OpenCV_LIBRARIES}
 )

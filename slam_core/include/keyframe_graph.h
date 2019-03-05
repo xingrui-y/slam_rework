@@ -2,15 +2,16 @@
 #define __KEY_FRAME_GRAPH__
 
 #include <memory>
+#include "rgbd_image.h"
 
 class KeyFrameGraph
 {
-  public:
-    KeyFrameGraph();
+public:
+  KeyFrameGraph();
 
-  private:
-    class KeyFrameGraphImpl;
-    std::shared_ptr<KeyFrameGraph> impl;
+private:
+  class KeyFrameGraphImpl;
+  std::shared_ptr<KeyFrameGraphImpl> impl;
 };
 
 #endif

@@ -1,6 +1,8 @@
 #include "openni_camera.h"
 #include <openni2/OpenNI.h>
 
+using namespace openni;
+
 class OpenNICamera::OpenNICameraImpl
 {
   public:
@@ -9,11 +11,11 @@ class OpenNICamera::OpenNICameraImpl
     void stop_video_streaming();
     bool capture(cv::Mat &colour, cv::Mat &depth);
 
-    openni::Device *device;
-    openni::VideoStream *colour_stream;
-    openni::VideoStream *depth_stream;
-    openni::VideoFrameRef *colour_frame;
-    openni::VideoFrameRef *depth_frame;
+    Device *device;
+    VideoStream *colour_stream;
+    VideoStream *depth_stream;
+    VideoFrameRef *colour_frame;
+    VideoFrameRef *depth_frame;
 
     int width, height, fps;
 };
@@ -21,45 +23,45 @@ class OpenNICamera::OpenNICameraImpl
 OpenNICamera::OpenNICameraImpl::OpenNICameraImpl(int width, int height, int fps)
     : width(width), height(height), fps(fps)
 {
-    if (openni::OpenNI::initialize() != openni::STATUS_OK)
+    if (OpenNI::initialize() != STATUS_OK)
     {
-        printf("OpenNI Initialisation Failed with Error Message : %s\n", openni::OpenNI::getExtendedError());
+        printf("OpenNI Initialisation Failed with Error Message : %s\n", OpenNI::getExtendedError());
         exit(0);
     }
 
-    device = new openni::Device();
-    if (device->open(openni::ANY_DEVICE) != openni::STATUS_OK)
+    device = new Device();
+    if (device->open(ANY_DEVICE) != STATUS_OK)
     {
-        printf("Couldn't open device\n%s\n", openni::OpenNI::getExtendedError());
+        printf("Couldn't open device\n%s\n", OpenNI::getExtendedError());
         exit(0);
     }
 
-    depth_stream = new openni::VideoStream();
-    colour_stream = new openni::VideoStream();
-    if (depth_stream->create(*device, openni::SENSOR_DEPTH) != openni::STATUS_OK ||
-        colour_stream->create(*device, openni::SENSOR_COLOR) != openni::STATUS_OK)
+    depth_stream = new VideoStream();
+    colour_stream = new VideoStream();
+    if (depth_stream->create(*device, SENSOR_DEPTH) != STATUS_OK ||
+        colour_stream->create(*device, SENSOR_COLOR) != STATUS_OK)
     {
-        printf("Couldn't create streaming service\n%s\n", openni::OpenNI::getExtendedError());
+        printf("Couldn't create streaming service\n%s\n", OpenNI::getExtendedError());
         exit(0);
     }
 
-    openni::VideoMode depth_video_mode = depth_stream->getVideoMode();
+    VideoMode depth_video_mode = depth_stream->getVideoMode();
     depth_video_mode.setResolution(width, height);
     depth_video_mode.setFps(fps);
-    depth_video_mode.setPixelFormat(openni::PIXEL_FORMAT_DEPTH_1_MM);
+    depth_video_mode.setPixelFormat(PIXEL_FORMAT_DEPTH_1_MM);
 
-    openni::VideoMode colour_video_mode = colour_stream->getVideoMode();
+    VideoMode colour_video_mode = colour_stream->getVideoMode();
     colour_video_mode.setResolution(width, height);
     colour_video_mode.setFps(fps);
-    colour_video_mode.setPixelFormat(openni::PIXEL_FORMAT_RGB888);
+    colour_video_mode.setPixelFormat(PIXEL_FORMAT_RGB888);
 
     depth_stream->setVideoMode(depth_video_mode);
     colour_stream->setVideoMode(colour_video_mode);
 
     // Note: Doing image registration earlier than this point seems to fail
-    if (device->isImageRegistrationModeSupported(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR))
+    if (device->isImageRegistrationModeSupported(IMAGE_REGISTRATION_DEPTH_TO_COLOR))
     {
-        if (device->setImageRegistrationMode(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR) == openni::STATUS_OK)
+        if (device->setImageRegistrationMode(IMAGE_REGISTRATION_DEPTH_TO_COLOR) == STATUS_OK)
         {
             printf("Depth To Colour Image Registration Set Success\n");
         }
@@ -81,20 +83,20 @@ void OpenNICamera::OpenNICameraImpl::start_video_streaming()
     depth_stream->setMirroringEnabled(false);
     colour_stream->setMirroringEnabled(false);
 
-    if (depth_stream->start() != openni::STATUS_OK)
+    if (depth_stream->start() != STATUS_OK)
     {
-        printf("Couldn't start depth streaming service\n%s\n", openni::OpenNI::getExtendedError());
+        printf("Couldn't start depth streaming service\n%s\n", OpenNI::getExtendedError());
         exit(0);
     }
 
-    if (colour_stream->start() != openni::STATUS_OK)
+    if (colour_stream->start() != STATUS_OK)
     {
-        printf("Couldn't start colour streaming service\n%s\n", openni::OpenNI::getExtendedError());
+        printf("Couldn't start colour streaming service\n%s\n", OpenNI::getExtendedError());
         exit(0);
     }
 
-    depth_frame = new openni::VideoFrameRef();
-    colour_frame = new openni::VideoFrameRef();
+    depth_frame = new VideoFrameRef();
+    colour_frame = new VideoFrameRef();
 
     printf("Camera Stream Started!\n");
 }
@@ -109,27 +111,27 @@ void OpenNICamera::OpenNICameraImpl::stop_video_streaming()
 
     device->close();
 
-    openni::OpenNI::shutdown();
+    OpenNI::shutdown();
     printf("Camera Stream Successfully Stopped.\n");
 }
 
 bool OpenNICamera::OpenNICameraImpl::capture(cv::Mat &colour, cv::Mat &depth)
 {
-    openni::VideoStream *streams[] = {depth_stream, colour_stream};
+    VideoStream *streams[] = {depth_stream, colour_stream};
     int streamReady = -1;
-    auto state = openni::STATUS_OK;
-    while (state == openni::STATUS_OK)
+    auto state = STATUS_OK;
+    while (state == STATUS_OK)
     {
-        state = openni::OpenNI::waitForAnyStream(streams, 2, &streamReady, 0);
-        if (state == openni::STATUS_OK)
+        state = OpenNI::waitForAnyStream(streams, 2, &streamReady, 0);
+        if (state == STATUS_OK)
         {
             switch (streamReady)
             {
             case 0:
             {
-                if (depth_stream->readFrame(depth_frame) != openni::STATUS_OK)
+                if (depth_stream->readFrame(depth_frame) != STATUS_OK)
                 {
-                    printf("Read failed!\n%s\n", openni::OpenNI::getExtendedError());
+                    printf("Read failed!\n%s\n", OpenNI::getExtendedError());
                     return false;
                 }
 
@@ -138,9 +140,9 @@ bool OpenNICamera::OpenNICameraImpl::capture(cv::Mat &colour, cv::Mat &depth)
             }
             case 1:
             {
-                if (colour_stream->readFrame(colour_frame) != openni::STATUS_OK)
+                if (colour_stream->readFrame(colour_frame) != STATUS_OK)
                 {
-                    printf("Read failed!\n%s\n", openni::OpenNI::getExtendedError());
+                    printf("Read failed!\n%s\n", OpenNI::getExtendedError());
                     return false;
                 }
 
@@ -163,24 +165,36 @@ bool OpenNICamera::OpenNICameraImpl::capture(cv::Mat &colour, cv::Mat &depth)
 OpenNICamera::OpenNICamera(int width, int height, int fps)
     : impl(new OpenNICameraImpl(width, height, fps))
 {
+    impl->start_video_streaming();
 }
 
 OpenNICamera::~OpenNICamera()
 {
-    stop_video_streaming();
-}
-
-bool OpenNICamera::capture(cv::Mat &colour, cv::Mat &depth)
-{
-    return impl->capture(colour, depth);
-}
-
-void OpenNICamera::start_video_streaming()
-{
-    impl->start_video_streaming();
-}
-
-void OpenNICamera::stop_video_streaming()
-{
     impl->stop_video_streaming();
+}
+
+bool OpenNICamera::read_next_images(cv::Mat &image, cv::Mat &depth)
+{
+    impl->capture(image, depth);
+    return true;
+}
+
+Sophus::SE3d OpenNICamera::get_starting_pose() const
+{
+    return Sophus::SE3d();
+}
+
+double OpenNICamera::get_current_timestamp() const
+{
+    return 0;
+}
+
+unsigned int OpenNICamera::get_current_id() const
+{
+    return 0;
+}
+
+std::vector<Sophus::SE3d> OpenNICamera::get_groundtruth() const
+{
+    return std::vector<Sophus::SE3d>();
 }

@@ -6,34 +6,29 @@
 #include <sophus/se3.hpp>
 #include "rgbd_image.h"
 
-class DenseTracker
+struct TrackingResult
 {
-public:
-  struct Result
-  {
-    Sophus::SE3d result;
-    float final_log_likelyhood;
-    std::vector<int> iterations_per_level;
-    float residual_sum;
-  };
-
-  struct Context
-  {
-    bool icp_only, rgb_only;
-    unsigned int levels;
-    bool use_initial_estimate;
-    Sophus::SE3d initial_estimate;
-    std::vector<int> max_iterations;
-  };
-
-  DenseTracker();
-  Result match(RgbdImagePyramidPtr reference, RgbdImagePyramidPtr target, const Context &c);
-
-private:
-  class DenseTrackerImpl;
-  std::shared_ptr<DenseTrackerImpl> impl;
+  bool sucess;
+  Sophus::SE3d update;
 };
 
-typedef std::shared_ptr<DenseTracker> DenseTrackerPtr;
+struct TrackingContext
+{
+  bool use_initial_guess_;
+  IntrinsicMatrixPyramid intrinsics_;
+  std::vector<int> tracking_level_;
+  Sophus::SE3d initial_estimate_;
+};
+
+class DenseTracking
+{
+public:
+  DenseTracking();
+  TrackingResult track(const RgbdFramePtr reference, const RgbdFramePtr current, const TrackingContext &c);
+
+private:
+  class DenseTrackingImpl;
+  std::shared_ptr<DenseTrackingImpl> impl;
+};
 
 #endif

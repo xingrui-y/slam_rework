@@ -1,8 +1,11 @@
-#ifndef __SAFECALL__
-#define __SAFECALL__
+#ifndef __SAFE_CALL__
+#define __SAFE_CALL__
 
 #include <iostream>
-#include <cuda_runtime_api.h>
+#include <cuda_runtime.h>
+
+#define MAX_THREAD 1024
+#define WARP_SIZE 32
 
 #if defined(__GNUC__)
 #define safe_call(expr) ___SafeCall(expr, __FILE__, __LINE__, __func__)

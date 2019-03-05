@@ -1,5 +1,5 @@
 #ifndef __STOP_WATCH__
-#define __STOP_WATHC__
+#define __STOP_WATCH__
 
 #include <ctime>
 #include <chrono>
@@ -8,12 +8,12 @@
 class StopWatch
 {
   typedef std::chrono::high_resolution_clock clock;
-  typedef std::chrono::milliseconds ms;
+  typedef std::chrono::milliseconds milliseconds;
 
 public:
   StopWatch(bool run = false);
   void reset();
-  ms Elapsed() const;
+  milliseconds Elapsed() const;
 
 private:
   clock::time_point start;

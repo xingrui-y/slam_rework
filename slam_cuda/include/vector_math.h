@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cuda_runtime.h>
 #include <cuda_runtime_api.h>
+#include <sophus/se3.hpp>
 
 __host__ __device__ __forceinline__ uchar3 make_uchar3(int a)
 {
@@ -455,9 +456,14 @@ __host__ __device__ __forceinline__ float3 fminf(float3 a, float3 b)
     return make_float3(fminf(a.x, b.x), fminf(a.y, b.y), fminf(a.z, b.z));
 }
 
+__host__ __forceinline__ float3 make_float3(const Sophus::SE3d &pose)
+{
+    auto t = pose.translation();
+    return make_float3(t(0), t(1), t(2));
+}
+
 struct Matrix3f
 {
-
     float3 rowx, rowy, rowz;
 
     __host__ __device__ __forceinline__ Matrix3f()
@@ -474,6 +480,14 @@ struct Matrix3f
         return mat3f;
     }
 
+    __host__ __forceinline__ Matrix3f(const Sophus::SE3d &pose)
+    {
+        auto r = pose.rotationMatrix();
+        this->rowx = make_float3(r(0, 0), r(0, 1), r(0, 2));
+        this->rowy = make_float3(r(1, 0), r(1, 1), r(1, 2));
+        this->rowz = make_float3(r(2, 0), r(2, 1), r(2, 2));
+    }
+
     __host__ __device__ __forceinline__ float3 operator*(float3 a) const
     {
         return make_float3(rowx * a, rowy * a, rowz * a);
@@ -483,6 +497,39 @@ struct Matrix3f
     {
         return make_float3(rowx * a, rowy * a, rowz * a);
     }
+};
+
+class Matrix3x4
+{
+  public:
+    Matrix3x4() = default;
+    Matrix3x4(const Sophus::SE3d &pose)
+    {
+        Eigen::Matrix<float, 4, 4> mat = pose.cast<float>().matrix();
+        rows[0] = make_float4(mat(0, 0), mat(0, 1), mat(0, 2), mat(0, 3));
+        rows[1] = make_float4(mat(1, 0), mat(1, 1), mat(1, 2), mat(1, 3));
+        rows[2] = make_float4(mat(2, 0), mat(2, 1), mat(2, 2), mat(2, 3));
+    }
+
+    __host__ __device__ float3 rotate(const float3 &pt) const
+    {
+        float3 result;
+        result.x = rows[0].x * pt.x + rows[0].y * pt.y + rows[0].z * pt.z;
+        result.x = rows[1].x * pt.x + rows[1].y * pt.y + rows[1].z * pt.z;
+        result.x = rows[2].x * pt.x + rows[2].y * pt.y + rows[2].z * pt.z;
+        return result;
+    }
+
+    __host__ __device__ float3 operator()(const float3 &pt) const
+    {
+        float3 result;
+        result.x = rows[0].x * pt.x + rows[0].y * pt.y + rows[0].z * pt.z + rows[0].w;
+        result.x = rows[1].x * pt.x + rows[1].y * pt.y + rows[1].z * pt.z + rows[1].w;
+        result.x = rows[2].x * pt.x + rows[2].y * pt.y + rows[2].z * pt.z + rows[2].w;
+        return result;
+    }
+
+    float4 rows[3];
 };
 
 #endif

@@ -9,7 +9,7 @@ PUBLIC
 
 target_sources(${PROJECT_NAME}
 PRIVATE
-    src/pangolin_gui.cpp
+    src/opengl_display.cpp
 )
 
 target_link_libraries(${PROJECT_NAME} 

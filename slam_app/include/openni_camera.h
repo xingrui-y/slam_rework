@@ -3,20 +3,23 @@
 
 #include <memory>
 #include <opencv2/opencv.hpp>
+#include "data_source.h"
 
-class OpenNICamera
+class OpenNICamera : public DataSource
 {
-  public:
-    OpenNICamera(int width, int height, int fps);
-    ~OpenNICamera();
+public:
+  OpenNICamera(int width, int height, int fps);
+  ~OpenNICamera();
 
-    void start_video_streaming();
-    void stop_video_streaming();
-    bool capture(cv::Mat &colour, cv::Mat &depth);
+  bool read_next_images(cv::Mat &image, cv::Mat &depth);
+  Sophus::SE3d get_starting_pose() const;
+  double get_current_timestamp() const;
+  unsigned int get_current_id() const;
+  std::vector<Sophus::SE3d> get_groundtruth() const;
 
-  private:
-    class OpenNICameraImpl;
-    std::shared_ptr<OpenNICameraImpl> impl;
+private:
+  class OpenNICameraImpl;
+  std::shared_ptr<OpenNICameraImpl> impl;
 };
 
 #endif

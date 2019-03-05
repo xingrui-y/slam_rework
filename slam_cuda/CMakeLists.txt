@@ -4,7 +4,11 @@ add_library(${PROJECT_NAME} SHARED "")
 
 target_sources(${PROJECT_NAME}
 PRIVATE
-    src/image_ops.cu
+    src/se3_reduction.cu
+    src/map_struct.cu
+    src/mesh_scene.cu
+    src/update_map.cu
+    src/render_scene.cu
 )
 
 find_package(CUDA 9.2 REQUIRED)
@@ -13,12 +17,18 @@ target_include_directories(${PROJECT_NAME}
 PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CUDA_INCLUDE_DIRS}
+    ${slam_util_INCLUDE_DIRS}
 )
 
 set_target_properties(${PROJECT_NAME} 
 PROPERTIES 
     CUDA_SEPARABLE_COMPILATION ON
     CUDA_STANDARD 11
+)
+
+target_link_libraries(${PROJECT_NAME}
+PRIVATE
+    Eigen3::Eigen
 )
 
 set(${PROJECT_NAME}_INCLUDE_DIRS ${PROJECT_SOURCE_DIR}/include CACHE INTERNAL "" FORCE)
