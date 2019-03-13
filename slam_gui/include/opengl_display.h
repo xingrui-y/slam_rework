@@ -13,7 +13,7 @@ public:
   void set_current_pose(const Sophus::SE3d &pose) const;
   void set_ground_truth_trajectory(const std::vector<Sophus::SE3d> &gt);
   void set_camera_trajectory(const std::vector<Sophus::SE3d> &camera);
-
+  void upload_mesh(const void *vertices, const void *normal, const void *texture, const size_t &size);
   bool should_quit() const;
   void draw_frame() const;
 

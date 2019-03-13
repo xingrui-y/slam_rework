@@ -15,11 +15,13 @@ public:
   void load_ground_truth(std::string file_name);
   bool read_next_images(cv::Mat &image, cv::Mat &depth);
 
+  // interface implementations
   void save_full_trajectory(std::vector<Sophus::SE3d> full_trajectory, std::string file_name) const;
   Sophus::SE3d get_starting_pose() const;
   double get_current_timestamp() const;
   unsigned int get_current_id() const;
   std::vector<Sophus::SE3d> get_groundtruth() const;
+  float get_depth_scale() const;
 
 private:
   int find_closest_index(std::vector<double> list, double time) const;

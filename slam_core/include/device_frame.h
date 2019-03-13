@@ -2,17 +2,15 @@
 #define __DEVICE_FRAME__
 
 #include "rgbd_image.h"
-#include "opencv2/cudaarithm.hpp"
-#include <mutex>
-#include <queue>
+#include <opencv2/cudaarithm.hpp>
 
-using DeviceImagePyramid = std::vector<cv::cuda::GpuMat>;
+typedef std::vector<cv::cuda::GpuMat> DeviceImagePyramid;
 class DeviceFrame;
-using DeviceFramePtr = std::shared_ptr<DeviceFrame>;
+typedef std::shared_ptr<DeviceFrame> DeviceFramePtr;
 class RgbdImage;
-using RgbdImagePtr = std::shared_ptr<RgbdImage>;
+typedef std::shared_ptr<RgbdImage> RgbdImagePtr;
 class RgbdFrame;
-using RgbdFramePtr = std::shared_ptr<RgbdFrame>;
+typedef std::shared_ptr<RgbdFrame> RgbdFramePtr;
 
 class DeviceFrame
 {

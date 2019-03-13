@@ -26,9 +26,9 @@ SlamSystem::SlamSystem(const IntrinsicMatrix &K) : impl(new SlamSystemImpl(K))
 {
 }
 
-void SlamSystem::update(const cv::Mat &intensity, const cv::Mat &depth, const unsigned long id, const double time_stamp)
+void SlamSystem::update(const cv::Mat &image, const cv::Mat &intensity, const cv::Mat &depth, const unsigned long id, const double time_stamp)
 {
-  impl->odometry->track(intensity, depth, impl->intrincis_matrix, id, time_stamp);
+  impl->odometry->track(image, intensity, depth, impl->intrincis_matrix, id, time_stamp);
 }
 
 RgbdFramePtr SlamSystem::get_current_frame() const

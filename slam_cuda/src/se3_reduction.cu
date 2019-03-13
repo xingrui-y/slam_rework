@@ -1,6 +1,6 @@
 #include "se3_reduction.h"
 #include "vector_math.h"
-#include "safe_call.h"
+#include "cuda_utils.h"
 
 template <int rows, int cols>
 void inline create_jtjjtr(cv::Mat &host_data, float *host_a, float *host_b)
@@ -113,8 +113,10 @@ struct RgbReduction
 
     __device__ __forceinline__ void operator()()
     {
-        float sum[29] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+        float sum[29] = {0, 0, 0, 0, 0, 0, 0, 0,
+                         0, 0, 0, 0, 0, 0, 0, 0,
+                         0, 0, 0, 0, 0, 0, 0, 0,
+                         0, 0, 0, 0, 0};
 
         float val[29];
         for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < N; i += blockDim.x * gridDim.x)
@@ -194,6 +196,7 @@ void rgb_reduce(const cv::cuda::GpuMat &curr_intensity,
     safe_call(cudaGetLastError());
 
     cv::cuda::reduce(sum, out, 0, cv::REDUCE_SUM);
+
     safe_call(cudaDeviceSynchronize());
     safe_call(cudaGetLastError());
 

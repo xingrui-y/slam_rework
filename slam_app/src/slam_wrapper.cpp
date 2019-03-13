@@ -9,6 +9,7 @@
 #include <opencv2/opencv.hpp>
 #include <exception>
 #include <thread>
+#include <mutex>
 
 class SlamWrapper::SlamWrapperImpl
 {
@@ -17,21 +18,31 @@ class SlamWrapper::SlamWrapperImpl
     ~SlamWrapperImpl();
     void dense_mapping_loop();
     void visualisation_loop();
+    void constraint_searching_loop();
+    void pose_graph_optimisation_loop();
 
     bool shutdown = false;
-    cv::Mat image, range;
+    cv::Mat image;
+    cv::Mat image_float;
     cv::Mat intensity, depth;
+    cv::Mat depth_float;
+    IntrinsicMatrix intrinsic_matrix;
     std::shared_ptr<SlamSystem> system_;
     std::shared_ptr<GlDisplay> display_;
     std::shared_ptr<DenseMapping> mapping_;
+
+    void log_stdout(const std::string msg);
+    std::mutex mutex_stdout_;
 };
 
 SlamWrapper::SlamWrapperImpl::SlamWrapperImpl(DataSource *source)
 {
-    IntrinsicMatrix K(640, 480, 517.3f, 516.5, 318.6, 255.3, 5);
-    system_ = std::make_shared<SlamSystem>(K);
+    intrinsic_matrix = IntrinsicMatrix(640, 480, 517.3f, 516.5, 318.6, 255.3, 5);
+    system_ = std::make_shared<SlamSystem>(intrinsic_matrix);
     std::thread t_display(&SlamWrapper::SlamWrapperImpl::visualisation_loop, this);
     std::thread t_mapping(&SlamWrapper::SlamWrapperImpl::dense_mapping_loop, this);
+    std::thread t_opt(&SlamWrapper::SlamWrapperImpl::pose_graph_optimisation_loop, this);
+    std::thread t_constraint(&SlamWrapper::SlamWrapperImpl::constraint_searching_loop, this);
 
     if (source->get_groundtruth().size() > 0)
     {
@@ -43,13 +54,13 @@ SlamWrapper::SlamWrapperImpl::SlamWrapperImpl(DataSource *source)
         system_->set_initial_pose(Sophus::SE3d());
     }
 
-    while (source->read_next_images(image, range) && !shutdown)
+    while (source->read_next_images(image, depth) && !shutdown)
     {
-        image.convertTo(intensity, CV_32FC1);
-        cv::cvtColor(intensity, intensity, cv::COLOR_BGR2GRAY);
-        range.convertTo(depth, CV_32FC1, 1 / 5000.f);
+        image.convertTo(image_float, CV_32FC3);
+        cv::cvtColor(image_float, intensity, cv::COLOR_BGR2GRAY);
+        depth.convertTo(depth_float, CV_32FC1, source->get_depth_scale());
 
-        system_->update(intensity, depth, source->get_current_id(), source->get_current_timestamp());
+        system_->update(image, intensity, depth_float, source->get_current_id(), source->get_current_timestamp());
 
         if (display_)
         {
@@ -66,28 +77,40 @@ SlamWrapper::SlamWrapperImpl::SlamWrapperImpl(DataSource *source)
 
     t_display.join();
     t_mapping.join();
+    t_constraint.join();
+    t_opt.join();
 }
 
 SlamWrapper::SlamWrapperImpl::~SlamWrapperImpl()
 {
 }
 
+void SlamWrapper::SlamWrapperImpl::log_stdout(const std::string msg)
+{
+    std::lock_guard<std::mutex> lock(mutex_stdout_);
+    std::cout << msg << std::endl;
+}
+
 void SlamWrapper::SlamWrapperImpl::dense_mapping_loop()
 {
-    std::cout << "Mapping Thread Started!" << std::endl;
-    mapping_ = std::make_shared<DenseMapping>();
+    mapping_ = std::make_shared<DenseMapping>(intrinsic_matrix, 0);
     while (!shutdown)
     {
         if (mapping_->has_update())
             mapping_->update();
         else
             std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
+        if (mapping_->need_visual_update())
+        {
+            mapping_->update_observation();
+            //display_->upload_mesh();
+        }
     }
 }
 
 void SlamWrapper::SlamWrapperImpl::visualisation_loop()
 {
-    std::cout << "GUI Thread Started!" << std::endl;
     display_ = std::make_shared<GlDisplay>();
     while (!display_->should_quit())
     {
@@ -95,6 +118,22 @@ void SlamWrapper::SlamWrapperImpl::visualisation_loop()
     }
 
     shutdown = true;
+}
+
+void SlamWrapper::SlamWrapperImpl::constraint_searching_loop()
+{
+    while (!shutdown)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    }
+}
+
+void SlamWrapper::SlamWrapperImpl::pose_graph_optimisation_loop()
+{
+    while (!shutdown)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    }
 }
 
 SlamWrapper::SlamWrapper(DataSource *source) : impl(new SlamWrapperImpl(source))

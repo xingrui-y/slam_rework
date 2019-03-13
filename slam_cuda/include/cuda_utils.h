@@ -1,6 +1,7 @@
-#ifndef __SAFE_CALL__
-#define __SAFE_CALL__
+#ifndef __CUDA_UTILS__
+#define __CUDA_UTILS__
 
+#include "intrinsic_matrix.h"
 #include <iostream>
 #include <cuda_runtime.h>
 
@@ -30,5 +31,15 @@ static inline int div_up(T a, U b)
 {
     return (int)((a + b - 1) / b);
 }
+
+struct DeviceIntrinsicMatrix
+{
+    inline DeviceIntrinsicMatrix() = default;
+    inline DeviceIntrinsicMatrix(IntrinsicMatrixPtr K) : fx(K->fx), fy(K->fy), cx(K->cx), cy(K->cy), invfx(K->invfx), invfy(K->invfy)
+    {
+    }
+
+    float fx, fy, cx, cy, invfx, invfy;
+};
 
 #endif

@@ -6,12 +6,13 @@ target_sources(${PROJECT_NAME}
 PRIVATE
     src/se3_reduction.cu
     src/map_struct.cu
-    src/mesh_scene.cu
-    src/update_map.cu
-    src/render_scene.cu
+    src/map_update.cu
+    src/map_render.cu
+    src/map_export.cu
+    src/image_ops.cu
 )
 
-find_package(CUDA 9.2 REQUIRED)
+#find_package(CUDA 9.2 REQUIRED)
 
 target_include_directories(${PROJECT_NAME}
 PUBLIC
@@ -29,6 +30,10 @@ PROPERTIES
 target_link_libraries(${PROJECT_NAME}
 PRIVATE
     Eigen3::Eigen
+)
+
+target_compile_options(${PROJECT_NAME}
+PRIVATE
 )
 
 set(${PROJECT_NAME}_INCLUDE_DIRS ${PROJECT_SOURCE_DIR}/include CACHE INTERNAL "" FORCE)

@@ -377,6 +377,13 @@ __host__ __device__ __forceinline__ int3 operator%(int3 a, int b)
     return make_int3(a.x % b, a.y % b, a.z % b);
 }
 
+__host__ __device__ __forceinline__ void operator%=(int3 &a, int b)
+{
+    a.x %= b;
+    a.y %= b;
+    a.z %= b;
+}
+
 __host__ __device__ __forceinline__ bool operator==(int3 a, int3 b)
 {
     return a.x == b.x && a.y == b.y && a.z == b.z;
@@ -499,11 +506,11 @@ struct Matrix3f
     }
 };
 
-class Matrix3x4
+class DeviceMatrix3x4
 {
   public:
-    Matrix3x4() = default;
-    Matrix3x4(const Sophus::SE3d &pose)
+    DeviceMatrix3x4() = default;
+    DeviceMatrix3x4(const Sophus::SE3d &pose)
     {
         Eigen::Matrix<float, 4, 4> mat = pose.cast<float>().matrix();
         rows[0] = make_float4(mat(0, 0), mat(0, 1), mat(0, 2), mat(0, 3));

@@ -18,6 +18,7 @@ class KeyFrameGraph::KeyFrameGraphImpl
 
     g2o::SparseOptimizer graph;
     std::list<RgbdFramePtr> keyframe_list;
+    std::queue<RgbdFramePtr> local_frames;
 };
 
 KeyFrameGraph::KeyFrameGraphImpl::KeyFrameGraphImpl()

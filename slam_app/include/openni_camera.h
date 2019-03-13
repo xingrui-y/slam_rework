@@ -16,6 +16,7 @@ public:
   double get_current_timestamp() const;
   unsigned int get_current_id() const;
   std::vector<Sophus::SE3d> get_groundtruth() const;
+  float get_depth_scale() const;
 
 private:
   class OpenNICameraImpl;

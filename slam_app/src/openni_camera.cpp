@@ -198,3 +198,8 @@ std::vector<Sophus::SE3d> OpenNICamera::get_groundtruth() const
 {
     return std::vector<Sophus::SE3d>();
 }
+
+float OpenNICamera::get_depth_scale() const
+{
+    return 1.f / 1000.f;
+}

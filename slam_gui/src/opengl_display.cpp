@@ -1,50 +1,50 @@
 #include "opengl_display.h"
 #include <sophus/se3.hpp>
 #include <pangolin/pangolin.h>
+#include <pangolin/gl/glcuda.h>
+#include <pangolin/gl/glvbo.h>
 #include <vector>
 
-const Eigen::Vector3f cam_vertices[12] =
-    {{0.04, 0.03, 0.03},
-     {0.04, -0.03, 0.03},
-     {0, 0, 0},
-     {-0.04, 0.03, 0.03},
-     {-0.04, -0.03, 0.03},
-     {0, 0, 0},
-     {0.04, 0.03, 0.03},
-     {-0.04, 0.03, 0.03},
-     {0, 0, 0},
-     {0.04, -0.03, 0.03},
-     {-0.04, -0.03, 0.03},
-     {0, 0, 0}};
-
-std::vector<GLfloat> generate_camera_points(const Sophus::SE3d &pose, float scale)
+struct MeshBuffer
 {
-    std::vector<GLfloat> result;
-    auto r = pose.rotationMatrix().cast<float>();
-    auto t = pose.translation().cast<float>();
+    MeshBuffer();
+    ~MeshBuffer();
 
-    for (auto vertex : cam_vertices)
-    {
-        auto vertex_transformed = r * vertex * scale + t;
-        result.push_back(vertex_transformed(0));
-        result.push_back(vertex_transformed(1));
-        result.push_back(vertex_transformed(2));
-    }
+    pangolin::GlBuffer *buffer_vertex;
+    pangolin::GlBuffer *buffer_normal;
+    pangolin::GlBuffer *buffer_texture;
 
-    return result;
+    size_t num_elements;
+    const size_t max_elements = 60000000;
+};
+
+MeshBuffer::MeshBuffer() : num_elements(0)
+{
+    buffer_vertex = new pangolin::GlBuffer(pangolin::GlArrayBuffer, max_elements, GL_FLOAT, 3);
+    buffer_normal = new pangolin::GlBuffer(pangolin::GlArrayBuffer, max_elements, GL_FLOAT, 3);
+    buffer_texture = new pangolin::GlBuffer(pangolin::GlArrayBuffer, max_elements, GL_FLOAT, 3);
+}
+
+MeshBuffer::~MeshBuffer()
+{
 }
 
 class GlDisplay::GlDisplayImpl
 {
   public:
     GlDisplayImpl(int width, int height);
-    void draw_frame();
-    void draw_camera();
     bool should_quit() const;
+
     void set_camera_pose(const Sophus::SE3d &pose);
     void set_model_view_matrix(const Sophus::SE3d &pose);
+
+    void switch_mesh_buffer();
+
+    void draw_frame();
+    void draw_camera();
     void draw_camera_trajectory() const;
     void draw_ground_truth_trajectory() const;
+    void draw_mesh_shaded(pangolin::GlSlProgram *program);
 
     pangolin::OpenGlRenderState camera;
     pangolin::View model_view_camera;
@@ -55,10 +55,17 @@ class GlDisplay::GlDisplayImpl
     pangolin::Var<bool> *btn_follow_camera;
     pangolin::Var<bool> *btn_show_ground_truth;
     pangolin::Var<bool> *btn_show_camera_trajectory;
+    pangolin::Var<bool> *btn_show_shaded_mesh;
+
+    //GLSL shaders
+    pangolin::GlSlProgram phong_shader;
 
     Sophus::SE3d current_pose;
     std::vector<Sophus::SE3d> ground_truth;
     std::vector<Sophus::SE3d> camera_trajectory;
+
+    std::shared_ptr<MeshBuffer> buffer[2];
+    std::mutex mutex_buffer_;
 };
 
 GlDisplay::GlDisplayImpl::GlDisplayImpl(int width, int height)
@@ -67,6 +74,13 @@ GlDisplay::GlDisplayImpl::GlDisplayImpl(int width, int height)
 
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
+
+    phong_shader.AddShaderFromFile(pangolin::GlSlVertexShader, "./glsl/phong_shader.glsl");
+    phong_shader.AddShaderFromFile(pangolin::GlSlFragmentShader, "./glsl/fragment_shader.glsl");
+    phong_shader.Link();
+
+    buffer[0] = std::make_shared<MeshBuffer>();
+    buffer[1] = std::make_shared<MeshBuffer>();
 
     camera = pangolin::OpenGlRenderState(pangolin::ProjectionMatrix(width, height, 528.f, 528.f, 320.f, 240.f, 0.1f, 100.f),
                                          pangolin::ModelViewLookAtRUB(0.f, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f, -1.f, 0.f));
@@ -80,14 +94,51 @@ GlDisplay::GlDisplayImpl::GlDisplayImpl(int width, int height)
     btn_follow_camera = new pangolin::Var<bool>("MainUI.Follow Camera", false, true);
     btn_show_ground_truth = new pangolin::Var<bool>("MainUI.Show Ground Truth", true, true);
     btn_show_camera_trajectory = new pangolin::Var<bool>("MainUI.Show Camera Trajectory", true, true);
+
+    btn_show_shaded_mesh = new pangolin::Var<bool>("MainUI.Show Mesh Phong", true, true);
+}
+
+void GlDisplay::GlDisplayImpl::switch_mesh_buffer()
+{
+    std::lock_guard<std::mutex> lock(mutex_buffer_);
+    std::swap(buffer[0], buffer[1]);
+}
+
+void GlDisplay::GlDisplayImpl::draw_mesh_shaded(pangolin::GlSlProgram *program)
+{
+    if (buffer[0] && buffer[0]->num_elements != 0)
+    {
+        std::lock_guard<std::mutex> lock(mutex_buffer_);
+
+        program->SaveBind();
+        program->SetUniform("viewMat", camera.GetModelViewMatrix());
+        program->SetUniform("projMat", camera.GetProjectionMatrix());
+        Eigen::Vector3f translation = current_pose.translation().cast<float>();
+        program->SetUniform("lightpos", translation(0), translation(1), translation(2));
+
+        GLuint vao_mesh;
+        glGenVertexArrays(1, &vao_mesh);
+        glBindVertexArray(vao_mesh);
+        buffer[0]->buffer_vertex->Bind();
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+        glEnableVertexAttribArray(0);
+        buffer[0]->buffer_vertex->Unbind();
+
+        buffer[0]->buffer_normal->Bind();
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_TRUE, 0, 0);
+        glEnableVertexAttribArray(1);
+        buffer[0]->buffer_normal->Unbind();
+
+        glDrawArrays(GL_TRIANGLES, 0, buffer[0]->num_elements * 3);
+        glDisableVertexAttribArray(0);
+        glDisableVertexAttribArray(1);
+        program->Unbind();
+        glBindVertexArray(0);
+    }
 }
 
 void GlDisplay::GlDisplayImpl::draw_camera()
 {
-    auto cam = generate_camera_points(current_pose, 15);
-    GLfloat rgb_active_cam[] = {0.f, 1.f, 0.f};
-    glColor3fv(rgb_active_cam);
-    pangolin::glDrawVertices(cam.size() / 3, (GLfloat *)&cam[0], GL_LINE_STRIP, 3);
 }
 
 void GlDisplay::GlDisplayImpl::draw_frame()
@@ -104,6 +155,9 @@ void GlDisplay::GlDisplayImpl::draw_frame()
 
     if (*btn_show_camera_trajectory)
         draw_camera_trajectory();
+
+    if (*btn_show_shaded_mesh)
+        draw_mesh_shaded(&phong_shader);
 
     draw_camera();
     pangolin::FinishFrame();
@@ -193,4 +247,13 @@ void GlDisplay::set_ground_truth_trajectory(const std::vector<Sophus::SE3d> &gt)
 void GlDisplay::set_camera_trajectory(const std::vector<Sophus::SE3d> &camera)
 {
     impl->camera_trajectory = camera;
+}
+
+void GlDisplay::upload_mesh(const void *vertices, const void *normal, const void *texture, const size_t &size)
+{
+    impl->buffer[1]->buffer_vertex->Upload(vertices, size * sizeof(float));
+    impl->buffer[1]->buffer_normal->Upload(normal, size * sizeof(float));
+    impl->buffer[1]->buffer_texture->Upload(texture, size * sizeof(float));
+    impl->buffer[1]->num_elements = size;
+    impl->switch_mesh_buffer();
 }

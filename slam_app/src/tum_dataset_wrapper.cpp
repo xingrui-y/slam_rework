@@ -148,6 +148,11 @@ std::vector<Sophus::SE3d> TUMDatasetWrapper::get_groundtruth() const
 	return ground_truth;
 }
 
+float TUMDatasetWrapper::get_depth_scale() const
+{
+	return 1.f / 5000.f;
+}
+
 double TUMDatasetWrapper::get_current_timestamp() const
 {
 	return time_stamp[id - 1];

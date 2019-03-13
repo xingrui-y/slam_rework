@@ -5,8 +5,8 @@
 #include <vector>
 
 struct IntrinsicMatrix;
-using IntrinsicMatrixPtr = std::shared_ptr<IntrinsicMatrix>;
-using IntrinsicMatrixPyramid = std::vector<IntrinsicMatrixPtr>;
+typedef std::shared_ptr<IntrinsicMatrix> IntrinsicMatrixPtr;
+typedef std::vector<IntrinsicMatrixPtr> IntrinsicMatrixPyramid;
 
 struct IntrinsicMatrix
 {

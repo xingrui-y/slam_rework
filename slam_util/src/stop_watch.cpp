@@ -18,6 +18,6 @@ StopWatch::milliseconds StopWatch::Elapsed() const
 
 std::ostream &operator<<(std::ostream &os, const StopWatch &timer)
 {
-    os << 1000.f / timer.Elapsed().count() << " fps";
+    os << timer.Elapsed().count() << " ms";
     return os;
 }

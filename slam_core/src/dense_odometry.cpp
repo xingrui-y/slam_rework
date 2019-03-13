@@ -7,13 +7,14 @@ class DenseOdometry::DenseOdometryImpl
   public:
     DenseOdometryImpl();
     void track(const RgbdFramePtr current);
-    bool keyframe_required() const;
+    bool keyframe_required(const TrackingResult &result) const;
 
     std::unique_ptr<DenseTracking> tracker;
     RgbdFramePtr current_keyframe;
     RgbdFramePtr last_frame;
     Sophus::SE3d initial_pose;
     std::vector<Sophus::SE3d> trajectory;
+    std::list<RgbdFramePtr> keyframe_list;
 };
 
 DenseOdometry::DenseOdometryImpl::DenseOdometryImpl()
@@ -21,7 +22,7 @@ DenseOdometry::DenseOdometryImpl::DenseOdometryImpl()
 {
 }
 
-bool DenseOdometry::DenseOdometryImpl::keyframe_required() const
+bool DenseOdometry::DenseOdometryImpl::keyframe_required(const TrackingResult &result) const
 {
     return true;
 }
@@ -32,6 +33,7 @@ void DenseOdometry::DenseOdometryImpl::track(const RgbdFramePtr current)
     {
         current->set_pose(initial_pose);
         current_keyframe = last_frame = current;
+        keyframe_list.push_back(current);
     }
     else
     {
@@ -54,9 +56,10 @@ void DenseOdometry::DenseOdometryImpl::track(const RgbdFramePtr current)
             return;
         }
 
-        if (keyframe_required())
+        if (keyframe_required(result))
         {
             current_keyframe = last_frame = current;
+            keyframe_list.push_back(current);
         }
     }
 }
@@ -65,9 +68,9 @@ DenseOdometry::DenseOdometry() : impl(new DenseOdometryImpl())
 {
 }
 
-void DenseOdometry::track(const cv::Mat &intensity, const cv::Mat &depth, const IntrinsicMatrixPyramid &K, const unsigned long id, const double time_stamp)
+void DenseOdometry::track(const cv::Mat &image, const cv::Mat &intensity, const cv::Mat &depth, const IntrinsicMatrixPyramid &K, const unsigned long id, const double time_stamp)
 {
-    impl->track(std::make_shared<RgbdFrame>(intensity, depth, K, id, time_stamp));
+    impl->track(std::make_shared<RgbdFrame>(image, intensity, depth, K, id, time_stamp));
 }
 
 void DenseOdometry::set_initial_pose(const Sophus::SE3d &pose)

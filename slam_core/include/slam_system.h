@@ -12,7 +12,7 @@ class SlamSystem
 {
 public:
   SlamSystem(const IntrinsicMatrix &K);
-  void update(const cv::Mat &intensity, const cv::Mat &depth, const unsigned long id, const double time_stamp);
+  void update(const cv::Mat &image, const cv::Mat &intensity, const cv::Mat &depth, const unsigned long id, const double time_stamp);
 
   RgbdFramePtr get_current_frame() const;
   Sophus::SE3d get_current_pose() const;

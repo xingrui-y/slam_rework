@@ -6,6 +6,7 @@ target_sources(${PROJECT_NAME}
 PRIVATE
     src/stop_watch.cpp
     src/intrinsic_matrix.cpp
+    src/message_logger.cpp
 )
 
 target_include_directories(${PROJECT_NAME}

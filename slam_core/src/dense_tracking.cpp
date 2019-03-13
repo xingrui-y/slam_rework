@@ -96,6 +96,19 @@ TrackingResult DenseTracking::DenseTrackingImpl::compute_transform(const DeviceF
                        jtr_rgb.data(),
                        residual_rgb_.data());
 
+            // icp_rgb_step(level,
+            //              current->owner_->get_image_pyramid()->get_intensity_map(level),
+            //              reference->owner_->get_image_pyramid()->get_intensity_map(level),
+            //              reference->owner_->get_image_pyramid()->get_point_cloud(level),
+            //              current->owner_->get_image_pyramid()->get_point_cloud(level),
+            //              reference->owner_->get_image_pyramid()->get_intensity_dx_map(level),
+            //              reference->owner_->get_image_pyramid()->get_intensity_dy_map(level),
+            //              current_estimate,
+            //              K,
+            //              jtj_rgb,
+            //              jtr_rgb,
+            //              residual_rgb_);
+
             JtJ_ = jtj_icp + 0.1 * jtj_rgb;
             Jtr_ = jtr_icp + 0.1 * jtr_rgb;
 

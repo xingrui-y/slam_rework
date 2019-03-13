@@ -15,8 +15,12 @@ DeviceFrame::DeviceFrame(const RgbdFramePtr data) : owner_(data)
 
 void DeviceFrame::upload(const RgbdFramePtr data)
 {
+    if (owner_ == data)
+        return;
+
     RgbdImagePtr image_pyramid = data->get_image_pyramid();
     int max_level = data->get_pyramid_level();
+    owner_ = data;
 
     for (int level = 0; level < max_level; ++level)
     {
