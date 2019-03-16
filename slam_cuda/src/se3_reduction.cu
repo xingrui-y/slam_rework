@@ -58,7 +58,7 @@ struct RgbReduction
 {
     __device__ bool find_corresp(int &x, int &y)
     {
-        p_transformed = r * point_cloud.ptr(y)[x] + t;
+        p_transformed = pose(point_cloud.ptr(y)[x]);
         u0 = p_transformed.x / p_transformed.z * fx + cx;
         v0 = p_transformed.y / p_transformed.z * fy + cy;
         if (u0 >= 0 && u0 < cols - 1 && v0 >= 0 && v0 < rows - 1)
@@ -137,8 +137,7 @@ struct RgbReduction
 
     int cols, rows, N;
     float u0, v0;
-    Matrix3f r;
-    float3 t;
+    DeviceMatrix3x4 pose;
     float fx, fy, cx, cy, invfx, invfy;
     cv::cuda::PtrStep<float3> point_cloud, last_vmap;
     cv::cuda::PtrStep<float> last_image, curr_image;
@@ -181,8 +180,7 @@ void rgb_reduce(const cv::cuda::GpuMat &curr_intensity,
     rr.last_vmap = last_vmap;
     rr.dIdx = intensity_dx;
     rr.dIdy = intensity_dy;
-    rr.r = Matrix3f(pose);
-    rr.t = make_float3(pose);
+    rr.pose = pose;
     rr.fx = K->fx;
     rr.fy = K->fy;
     rr.cx = K->cx;
@@ -216,7 +214,7 @@ struct ICPReduction
         if (isnan(vcurr_c.x))
             return false;
 
-        vcurr_g = Rcurr * vcurr_c + tcurr;
+        vcurr_g = pose(vcurr_c);
 
         float invz = 1.0 / vcurr_g.z;
         int u = (int)(vcurr_g.x * invz * fx + cx + 0.5);
@@ -227,7 +225,7 @@ struct ICPReduction
         vlast_g = last_vmap_.ptr(v)[u];
 
         float3 ncurr_c = curr_nmap_.ptr(y)[x];
-        float3 ncurr_g = Rcurr * ncurr_c;
+        float3 ncurr_g = pose.rotate(ncurr_c);
 
         nlast_g = last_nmap_.ptr(v)[u];
 
@@ -295,8 +293,7 @@ struct ICPReduction
         }
     }
 
-    Matrix3f Rcurr;
-    float3 tcurr;
+    DeviceMatrix3x4 pose;
     cv::cuda::PtrStep<float3> curr_vmap_, last_vmap_;
     cv::cuda::PtrStep<float3> curr_nmap_, last_nmap_;
     int cols, rows, N;
@@ -333,8 +330,7 @@ void icp_reduce(const cv::cuda::GpuMat &curr_vmap,
     icp.cols = cols;
     icp.rows = rows;
     icp.N = cols * rows;
-    icp.Rcurr = Matrix3f(pose);
-    icp.tcurr = make_float3(pose);
+    icp.pose = pose;
     icp.angleThresh = 0.6;
     icp.distThresh = 0.1;
     icp.fx = K->fx;

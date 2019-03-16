@@ -2,13 +2,18 @@
 #define __IMAGE_OPS__
 
 #include "intrinsic_matrix.h"
-#include <sophus/se3.hpp>
-#include <opencv2/opencv.hpp>
+#include <opencv2/cudaarithm.hpp>
 
 namespace slam
 {
 namespace cuda
 {
+
+void build_depth_pyramid(const cv::cuda::GpuMat &base_depth, std::vector<cv::cuda::GpuMat> &pyramid, const int &max_level);
+void build_intensity_pyramid(const cv::cuda::GpuMat &base_intensity, std::vector<cv::cuda::GpuMat> &pyramid, const int &max_level);
+void build_intensity_derivative_pyramid(const std::vector<cv::cuda::GpuMat> &intensity, std::vector<cv::cuda::GpuMat> &sobel_x, std::vector<cv::cuda::GpuMat> &sobel_y);
+void build_point_cloud_pyramid(const std::vector<cv::cuda::GpuMat> &depth, std::vector<cv::cuda::GpuMat> &pyramid, const IntrinsicMatrixPyramidPtr intrinsics_pyr);
+void build_normal_pyramid(const std::vector<cv::cuda::GpuMat> &vmap_pyr, std::vector<cv::cuda::GpuMat> &nmap_pyr);
 
 } // namespace cuda
 } // namespace slam

@@ -1,10 +1,11 @@
 #include "device_map_ops.h"
 #include "vector_math.h"
 #include "cuda_utils.h"
+#include <opencv2/opencv.hpp>
 
 #define RENDERING_BLOCK_SIZE_X 16
 #define RENDERING_BLOCK_SIZE_Y 16
-#define RENDERING_BLOCK_SUBSAMPLE 8;
+#define RENDERING_BLOCK_SUBSAMPLE 8
 
 namespace slam
 {
@@ -112,6 +113,7 @@ struct RenderingBlockDelegate
         block.lower_right = make_short2(-1, -1);
         block.zrange = make_float2(param.zmax_raycast_, param.zmin_raycast_);
 
+#pragma unroll
         for (int corner = 0; corner < 8; ++corner)
         {
             int3 tmp = block_pos;
@@ -119,7 +121,7 @@ struct RenderingBlockDelegate
             tmp.y += (corner & 2) ? 1 : 0;
             tmp.z += (corner & 4) ? 1 : 0;
 
-            float3 pt3d = tmp * BLOCK_SIZE * param.voxel_size_;
+            float3 pt3d = tmp * param.block_size_metric();
             pt3d = inv_pose(pt3d);
 
             float2 pt2d = project(pt3d) / RENDERING_BLOCK_SUBSAMPLE;
@@ -173,6 +175,7 @@ struct RenderingBlockDelegate
     __device__ __forceinline__ void create_rendering_block_list(int &offset, const RenderingBlock &block, int &nx, int &ny) const
     {
         for (int y = 0; y < ny; ++y)
+        {
             for (int x = 0; x < ny; ++x)
             {
                 if (offset < param.num_max_rendering_blocks_)
@@ -193,6 +196,7 @@ struct RenderingBlockDelegate
                     b.zrange = block.zrange;
                 }
             }
+        }
     }
 
     __device__ __forceinline__ void operator()() const
@@ -268,7 +272,7 @@ void create_rendering_blocks(MapStruct map_struct,
                              cv::cuda::GpuMat &zrange_x,
                              cv::cuda::GpuMat &zrange_y,
                              const Sophus::SE3d &frame_pose,
-                             const IntrinsicMatrixPtr intrinsic_matrix)
+                             const IntrinsicMatrix intrinsic_matrix)
 {
     uint visible_block_count;
     map_struct.get_visible_block_count(visible_block_count);
@@ -278,7 +282,7 @@ void create_rendering_blocks(MapStruct map_struct,
     const int cols = zrange_x.cols;
     const int rows = zrange_y.rows;
 
-    zrange_x.setTo(cv::Scalar(std::numeric_limits<float>::max()));
+    zrange_x.setTo(cv::Scalar(100.f));
     zrange_y.setTo(cv::Scalar(0));
     map_struct.reset_rendering_block_count();
 
@@ -289,10 +293,10 @@ void create_rendering_blocks(MapStruct map_struct,
     delegate.inv_pose = frame_pose.inverse();
     delegate.zrange_x = zrange_x;
     delegate.zrange_y = zrange_y;
-    delegate.fx = intrinsic_matrix->fx;
-    delegate.fy = intrinsic_matrix->fy;
-    delegate.cx = intrinsic_matrix->cx;
-    delegate.cy = intrinsic_matrix->cy;
+    delegate.fx = intrinsic_matrix.fx;
+    delegate.fy = intrinsic_matrix.fy;
+    delegate.cx = intrinsic_matrix.cx;
+    delegate.cy = intrinsic_matrix.cy;
     delegate.visible_block_pos = map_struct.visible_block_pos_;
     delegate.visible_block_count = map_struct.visible_block_count_;
     delegate.rendering_block_count = map_struct.rendering_block_count;
@@ -302,8 +306,8 @@ void create_rendering_blocks(MapStruct map_struct,
     dim3 block = dim3(div_up(visible_block_count, thread.x));
 
     create_rendering_blocks_kernel<<<block, thread>>>(delegate);
-    // safe_call(cudaGetLastError());
-    // safe_call(cudaDeviceSynchronize());
+    safe_call(cudaGetLastError());
+    safe_call(cudaDeviceSynchronize());
 
     uint rendering_block_count;
     map_struct.get_rendering_block_count(rendering_block_count);
@@ -314,8 +318,227 @@ void create_rendering_blocks(MapStruct map_struct,
     block = dim3((uint)ceil((float)rendering_block_count / 4), 4);
 
     split_and_fill_rendering_blocks_kernel<<<block, thread>>>(delegate);
-    // safe_call(cudaGetLastError());
-    // safe_call(cudaDeviceSynchronize());
+    safe_call(cudaGetLastError());
+    safe_call(cudaDeviceSynchronize());
+}
+
+struct MapRenderingDelegate
+{
+    int width, height;
+    MapStruct map_struct;
+    mutable cv::cuda::PtrStep<float4> vmap;
+    mutable cv::cuda::PtrStep<float4> nmap;
+    cv::cuda::PtrStepSz<float> zrange_x;
+    cv::cuda::PtrStepSz<float> zrange_y;
+    float invfx, invfy, cx, cy;
+    DeviceMatrix3x4 pose, inv_pose;
+
+    __device__ __forceinline__ float read_sdf(const float3 &pt3d, bool &valid)
+    {
+        Voxel *voxel = nullptr;
+        map_struct.find_voxel(make_int3(pt3d), voxel);
+        if (voxel != nullptr)
+        {
+            valid = true;
+            return voxel->sdf_;
+        }
+        else
+        {
+            valid = false;
+            return nanf("0x7fffff");
+        }
+    }
+
+    __device__ __forceinline__ float read_sdf_interped(const float3 &pt, bool &valid)
+    {
+        float3 xyz = pt - floor(pt);
+        float sdf[2], result[4];
+
+        sdf[0] = read_sdf(pt, valid);
+        sdf[1] = read_sdf(pt + make_float3(1, 0, 0), valid);
+        result[0] = (1.0f - xyz.x) * sdf[0] + xyz.x * sdf[1];
+
+        sdf[0] = read_sdf(pt + make_float3(0, 1, 0), valid);
+        sdf[1] = read_sdf(pt + make_float3(1, 1, 0), valid);
+        result[1] = (1.0f - xyz.x) * sdf[0] + xyz.x * sdf[1];
+        result[2] = (1.0f - xyz.y) * result[0] + xyz.y * result[1];
+
+        sdf[0] = read_sdf(pt + make_float3(0, 0, 1), valid);
+        sdf[1] = read_sdf(pt + make_float3(1, 0, 1), valid);
+        result[0] = (1.0f - xyz.x) * sdf[0] + xyz.x * sdf[1];
+
+        sdf[0] = read_sdf(pt + make_float3(0, 1, 1), valid);
+        sdf[1] = read_sdf(pt + make_float3(1, 1, 1), valid);
+        result[1] = (1.0f - xyz.x) * sdf[0] + xyz.x * sdf[1];
+        result[3] = (1.0f - xyz.y) * result[0] + xyz.y * result[1];
+        return (1.0f - xyz.z) * result[2] + xyz.z * result[3];
+    }
+
+    __device__ __forceinline__ bool read_normal_approximate(const float3 &pt, float3 &n)
+    {
+
+        bool valid;
+        float sdf[6];
+        sdf[0] = read_sdf_interped(pt + make_float3(1, 0, 0), valid);
+        if (isnan(sdf[0]) || sdf[0] == 1.0f || !valid)
+            return false;
+
+        sdf[1] = read_sdf_interped(pt + make_float3(-1, 0, 0), valid);
+        if (isnan(sdf[1]) || sdf[1] == 1.0f || !valid)
+            return false;
+
+        sdf[2] = read_sdf_interped(pt + make_float3(0, 1, 0), valid);
+        if (isnan(sdf[2]) || sdf[2] == 1.0f || !valid)
+            return false;
+
+        sdf[3] = read_sdf_interped(pt + make_float3(0, -1, 0), valid);
+        if (isnan(sdf[3]) || sdf[3] == 1.0f || !valid)
+            return false;
+
+        sdf[4] = read_sdf_interped(pt + make_float3(0, 0, 1), valid);
+        if (isnan(sdf[4]) || sdf[4] == 1.0f || !valid)
+            return false;
+
+        sdf[5] = read_sdf_interped(pt + make_float3(0, 0, -1), valid);
+        if (isnan(sdf[5]) || sdf[5] == 1.0f || !valid)
+            return false;
+
+        n = make_float3(sdf[0] - sdf[1], sdf[2] - sdf[3], sdf[4] - sdf[5]);
+        n = normalised(inv_pose.rotate(n));
+        return true;
+    }
+
+    __device__ __forceinline__ float3 unproject(const int &x, const int &y, const float &z) const
+    {
+        return make_float3((x - cx) * invfx * z, (y - cy) * invfy * z, z);
+    }
+
+    __device__ __forceinline__ void operator()()
+    {
+        const int x = threadIdx.x + blockDim.x * blockIdx.x;
+        const int y = threadIdx.y + blockDim.y * blockIdx.y;
+        if (x >= width || y >= height)
+            return;
+
+        vmap.ptr(y)[x] = make_float4(__int_as_float(0x7fffffff));
+        nmap.ptr(y)[x] = make_float4(__int_as_float(0x7fffffff));
+
+        int2 local_id;
+        local_id.x = __float2int_rd((float)x / 8);
+        local_id.y = __float2int_rd((float)y / 8);
+
+        float2 zrange;
+        zrange.x = zrange_x.ptr(local_id.y)[local_id.x];
+        zrange.y = zrange_y.ptr(local_id.y)[local_id.x];
+        if (zrange.y < 1e-3 || zrange.x < 1e-3 || isnan(zrange.x) || isnan(zrange.y))
+            return;
+
+        float sdf = 1.0f;
+
+        float3 pt = unproject(x, y, zrange.x);
+        float dist_s = norm(pt) * param.inverse_voxel_size();
+        float3 block_s = pose(pt) * param.inverse_voxel_size();
+
+        pt = unproject(x, y, zrange.y);
+        float dist_e = norm(pt) * param.inverse_voxel_size();
+        float3 block_e = pose(pt) * param.inverse_voxel_size();
+
+        float3 dir = normalised(block_e - block_s);
+        float3 result = block_s;
+
+        bool valid_sdf = false;
+        bool found_pt = false;
+        float step;
+
+        while (dist_s < dist_e)
+        {
+            sdf = read_sdf(result, valid_sdf);
+            if (!valid_sdf)
+            {
+                step = BLOCK_SIZE;
+            }
+            else
+            {
+                if (sdf <= 0.1f && sdf >= -0.5f)
+                    sdf = read_sdf_interped(result, valid_sdf);
+
+                if (sdf <= 0.0f)
+                    break;
+
+                if (!isnan(sdf))
+                    step = max(sdf * param.raycast_step_scale(), 1.0f);
+                else
+                    step = BLOCK_SIZE;
+            }
+
+            result += step * dir;
+            dist_s += step;
+        }
+
+        if (sdf <= 0.0f)
+        {
+            step = sdf * param.raycast_step_scale();
+            result += step * dir;
+
+            sdf = read_sdf_interped(result, valid_sdf);
+
+            step = sdf * param.raycast_step_scale();
+            result += step * dir;
+            found_pt = true;
+        }
+
+        if (found_pt)
+        {
+            float3 normal;
+            if (read_normal_approximate(result, normal))
+            {
+                result = inv_pose(result * param.voxel_size_);
+                vmap.ptr(y)[x] = make_float4(result, 1.0);
+                nmap.ptr(y)[x] = make_float4(normal, 1.0);
+            }
+        }
+    }
+};
+
+__global__ void __launch_bounds__(32, 16) raycast_kernel(MapRenderingDelegate delegate)
+{
+    delegate();
+}
+
+void raycast(MapStruct map_struct,
+             cv::cuda::GpuMat vmap,
+             cv::cuda::GpuMat nmap,
+             cv::cuda::GpuMat zrange_x,
+             cv::cuda::GpuMat zrange_y,
+             const Sophus::SE3d &pose,
+             const IntrinsicMatrix intrinsic_matrix)
+{
+    const int cols = vmap.cols;
+    const int rows = vmap.rows;
+
+    MapRenderingDelegate delegate;
+
+    delegate.width = cols;
+    delegate.height = rows;
+    delegate.map_struct = map_struct;
+    delegate.vmap = vmap;
+    delegate.nmap = nmap;
+    delegate.zrange_x = zrange_x;
+    delegate.zrange_y = zrange_y;
+    delegate.invfx = intrinsic_matrix.invfx;
+    delegate.invfy = intrinsic_matrix.invfy;
+    delegate.cx = intrinsic_matrix.cx;
+    delegate.cy = intrinsic_matrix.cy;
+    delegate.pose = pose;
+    delegate.inv_pose = pose.inverse();
+
+    dim3 thread(4, 8);
+    dim3 block(div_up(cols, thread.x), div_up(rows, thread.y));
+
+    raycast_kernel<<<block, thread>>>(delegate);
+
+    safe_call(cudaGetLastError());
+    safe_call(cudaDeviceSynchronize());
 }
 
 } // namespace map

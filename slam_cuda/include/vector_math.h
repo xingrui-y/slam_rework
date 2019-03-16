@@ -469,43 +469,6 @@ __host__ __forceinline__ float3 make_float3(const Sophus::SE3d &pose)
     return make_float3(t(0), t(1), t(2));
 }
 
-struct Matrix3f
-{
-    float3 rowx, rowy, rowz;
-
-    __host__ __device__ __forceinline__ Matrix3f()
-    {
-        rowx = rowy = rowz = make_float3(0, 0, 0);
-    }
-
-    __host__ __device__ __forceinline__ Matrix3f transpose()
-    {
-        Matrix3f mat3f;
-        mat3f.rowx = make_float3(rowx.x, rowy.x, rowz.x);
-        mat3f.rowx = make_float3(rowx.y, rowy.y, rowz.y);
-        mat3f.rowx = make_float3(rowx.z, rowy.z, rowz.z);
-        return mat3f;
-    }
-
-    __host__ __forceinline__ Matrix3f(const Sophus::SE3d &pose)
-    {
-        auto r = pose.rotationMatrix();
-        this->rowx = make_float3(r(0, 0), r(0, 1), r(0, 2));
-        this->rowy = make_float3(r(1, 0), r(1, 1), r(1, 2));
-        this->rowz = make_float3(r(2, 0), r(2, 1), r(2, 2));
-    }
-
-    __host__ __device__ __forceinline__ float3 operator*(float3 a) const
-    {
-        return make_float3(rowx * a, rowy * a, rowz * a);
-    }
-
-    __host__ __device__ __forceinline__ float3 operator*(float4 a) const
-    {
-        return make_float3(rowx * a, rowy * a, rowz * a);
-    }
-};
-
 class DeviceMatrix3x4
 {
   public:
@@ -513,30 +476,30 @@ class DeviceMatrix3x4
     DeviceMatrix3x4(const Sophus::SE3d &pose)
     {
         Eigen::Matrix<float, 4, 4> mat = pose.cast<float>().matrix();
-        rows[0] = make_float4(mat(0, 0), mat(0, 1), mat(0, 2), mat(0, 3));
-        rows[1] = make_float4(mat(1, 0), mat(1, 1), mat(1, 2), mat(1, 3));
-        rows[2] = make_float4(mat(2, 0), mat(2, 1), mat(2, 2), mat(2, 3));
+        row_0 = make_float4(mat(0, 0), mat(0, 1), mat(0, 2), mat(0, 3));
+        row_1 = make_float4(mat(1, 0), mat(1, 1), mat(1, 2), mat(1, 3));
+        row_2 = make_float4(mat(2, 0), mat(2, 1), mat(2, 2), mat(2, 3));
     }
 
     __host__ __device__ float3 rotate(const float3 &pt) const
     {
         float3 result;
-        result.x = rows[0].x * pt.x + rows[0].y * pt.y + rows[0].z * pt.z;
-        result.x = rows[1].x * pt.x + rows[1].y * pt.y + rows[1].z * pt.z;
-        result.x = rows[2].x * pt.x + rows[2].y * pt.y + rows[2].z * pt.z;
+        result.x = row_0.x * pt.x + row_0.y * pt.y + row_0.z * pt.z;
+        result.y = row_1.x * pt.x + row_1.y * pt.y + row_1.z * pt.z;
+        result.z = row_2.x * pt.x + row_2.y * pt.y + row_2.z * pt.z;
         return result;
     }
 
     __host__ __device__ float3 operator()(const float3 &pt) const
     {
         float3 result;
-        result.x = rows[0].x * pt.x + rows[0].y * pt.y + rows[0].z * pt.z + rows[0].w;
-        result.x = rows[1].x * pt.x + rows[1].y * pt.y + rows[1].z * pt.z + rows[1].w;
-        result.x = rows[2].x * pt.x + rows[2].y * pt.y + rows[2].z * pt.z + rows[2].w;
+        result.x = row_0.x * pt.x + row_0.y * pt.y + row_0.z * pt.z + row_0.w;
+        result.y = row_1.x * pt.x + row_1.y * pt.y + row_1.z * pt.z + row_1.w;
+        result.z = row_2.x * pt.x + row_2.y * pt.y + row_2.z * pt.z + row_2.w;
         return result;
     }
 
-    float4 rows[3];
+    float4 row_0, row_1, row_2;
 };
 
 #endif

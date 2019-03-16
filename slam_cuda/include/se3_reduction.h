@@ -5,27 +5,25 @@
 #include "sophus/se3.hpp"
 #include <opencv2/cudaarithm.hpp>
 
-using DeviceImage = cv::cuda::GpuMat;
-
-void rgb_reduce(const DeviceImage &curr_intensity,
-                const DeviceImage &last_intensity,
-                const DeviceImage &last_vmap,
-                const DeviceImage &curr_vmap,
-                const DeviceImage &intensity_dx,
-                const DeviceImage &intensity_dy,
-                DeviceImage &sum,
-                DeviceImage &out,
+void rgb_reduce(const cv::cuda::GpuMat &curr_intensity,
+                const cv::cuda::GpuMat &last_intensity,
+                const cv::cuda::GpuMat &last_vmap,
+                const cv::cuda::GpuMat &curr_vmap,
+                const cv::cuda::GpuMat &intensity_dx,
+                const cv::cuda::GpuMat &intensity_dy,
+                cv::cuda::GpuMat &sum,
+                cv::cuda::GpuMat &out,
                 const Sophus::SE3d &pose,
                 const IntrinsicMatrixPtr K,
                 float *jtj, float *jtr,
                 float *residual);
 
-void icp_reduce(const DeviceImage &curr_vmap,
-                const DeviceImage &curr_nmap,
-                const DeviceImage &last_vmap,
-                const DeviceImage &last_nmap,
-                DeviceImage &sum,
-                DeviceImage &out,
+void icp_reduce(const cv::cuda::GpuMat &curr_vmap,
+                const cv::cuda::GpuMat &curr_nmap,
+                const cv::cuda::GpuMat &last_vmap,
+                const cv::cuda::GpuMat &last_nmap,
+                cv::cuda::GpuMat &sum,
+                cv::cuda::GpuMat &out,
                 const Sophus::SE3d &pose,
                 const IntrinsicMatrixPtr K,
                 float *jtj, float *jtr,

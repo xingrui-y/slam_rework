@@ -1,29 +1,53 @@
 #include "intrinsic_matrix.h"
 #include <iostream>
 
-IntrinsicMatrix::IntrinsicMatrix(int cols, int rows, float fx, float fy, float cx, float cy, int level)
-    : width(cols), height(rows), fx(fx), fy(fy), cx(cx), cy(cy), invfx(1.0 / fx), invfy(1.0f / fy), level(level)
+IntrinsicMatrix::IntrinsicMatrix(int cols, int rows, float fx, float fy, float cx, float cy)
+    : width(cols), height(rows), fx(fx), fy(fy), cx(cx), cy(cy), invfx(1.0f / fx), invfy(1.0f / fy)
 {
 }
 
-IntrinsicMatrix IntrinsicMatrix::scaled(int level) const
+IntrinsicMatrix::IntrinsicMatrix(const IntrinsicMatrix &other)
+    : width(other.width), height(other.height), fx(other.fx), fy(other.fy),
+      cx(other.cx), cy(other.cy), invfx(other.invfx), invfy(other.invfy)
 {
-    float s = 1.0 / (1 << level);
-    return IntrinsicMatrix(width * s, height * s, fx * s, fy * s, cx * s, cy * s, level);
 }
 
-IntrinsicMatrixPyramid IntrinsicMatrix::build_pyramid() const
+IntrinsicMatrix IntrinsicMatrix::pyr_down() const
 {
-    return build_pyramid(level);
+    float s = 0.5f;
+    return IntrinsicMatrix(s * width, s * height, s * fx, s * fy, s * cx, s * cy);
 }
 
-IntrinsicMatrixPyramid IntrinsicMatrix::build_pyramid(int max_level) const
+IntrinsicMatrixPyramid::IntrinsicMatrixPyramid(const IntrinsicMatrix &base_intrinsic_matrix, const int &max_level)
 {
-    IntrinsicMatrixPyramid pyramid(max_level);
-    for (int level = 0; level < max_level; ++level)
+    pyramid_.resize(max_level);
+    pyramid_[0] = std::make_shared<IntrinsicMatrix>(base_intrinsic_matrix);
+    for (int i = 0; i < pyramid_.size() - 1; ++i)
     {
-        IntrinsicMatrix temp = scaled(level);
-        pyramid[level] = std::make_shared<IntrinsicMatrix>(temp);
+        pyramid_[i + 1] = std::make_shared<IntrinsicMatrix>(pyramid_[i]->pyr_down());
     }
-    return pyramid;
+}
+
+IntrinsicMatrixPtr IntrinsicMatrixPyramid::operator[](int level) const
+{
+    return pyramid_[level];
+}
+
+int IntrinsicMatrixPyramid::get_max_level() const
+{
+    return pyramid_.size();
+}
+
+std::ostream &operator<<(std::ostream &o, IntrinsicMatrix &K)
+{
+    o << "fx : " << K.fx << " , "
+      << "fy : " << K.fy << " , "
+      << "cx : " << K.cx << " , "
+      << "cy : " << K.cy << " , "
+      << "invfx : " << K.invfx << " , "
+      << "invfy : " << K.invfy << " , "
+      << "cols : " << K.width << " , "
+      << "rows : " << K.height;
+
+    return o;
 }

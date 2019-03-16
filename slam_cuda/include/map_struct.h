@@ -3,6 +3,7 @@
 
 #include <cuda.h>
 #include <cuda_runtime.h>
+#include <iostream>
 
 #define BLOCK_SIZE 8
 #define BLOCK_SIZE_SUB_1 7
@@ -46,12 +47,10 @@ struct Voxel
     short weight_;
     uchar3 rgb_;
 
-#ifdef __NVCC__
     __device__ Voxel();
     __device__ Voxel(float sdf, short weight, uchar3 rgb);
     __device__ void getValue(float &sdf, uchar3 &rgb) const;
     __device__ Voxel &operator=(const Voxel &other);
-#endif
 };
 
 struct HashEntry
@@ -60,32 +59,16 @@ struct HashEntry
     int offset_;
     int3 pos_;
 
-#ifdef __NVCC__
     __device__ HashEntry();
     __device__ HashEntry(int3 pos, int next, int offset);
     __device__ HashEntry(const HashEntry &other);
     __device__ HashEntry &operator=(const HashEntry &other);
     __device__ bool operator==(const int3 &pos) const;
     __device__ bool operator==(const HashEntry &other) const;
-#endif
 };
 
 struct MapStruct
 {
-    int *heap_mem_;
-    int *excess_counter_;
-    int *heap_mem_counter_;
-    int *bucket_mutex_;
-
-    uint *visible_block_count_;
-    HashEntry *visible_block_pos_;
-
-    Voxel *voxels_;
-    HashEntry *hash_table_;
-
-    uint *rendering_block_count;
-    RenderingBlock *rendering_blocks;
-
     MapStruct() = default;
     MapStruct(const MapState &);
     MapStruct(const int &n_buckets, const int &n_entries, const int &n_blocks, const float &voxel_size);
@@ -98,7 +81,6 @@ struct MapStruct
     void reset_rendering_block_count();
     void get_rendering_block_count(uint &count) const;
 
-#ifdef __CUDACC__
     __device__ int compute_hash(const int3 &pos) const;
     __device__ bool lock_bucket(int *mutex);
     __device__ void unlock_bucket(int *mutex);
@@ -115,13 +97,26 @@ struct MapStruct
     __device__ int3 voxel_pos_to_local_pos(int3 pos) const;
     __device__ int3 local_idx_to_local_pos(const int &idx) const;
     __device__ float3 voxel_pos_to_world_pt(const int3 &voxel_pos) const;
-#endif
+
+    int *heap_mem_;
+    int *excess_counter_;
+    int *heap_mem_counter_;
+    int *bucket_mutex_;
+
+    uint *visible_block_count_;
+    HashEntry *visible_block_pos_;
+
+    Voxel *voxels_;
+    HashEntry *hash_table_;
+
+    uint *rendering_block_count;
+    RenderingBlock *rendering_blocks;
 };
 
 extern MapState state;
 __device__ extern MapState param;
-
 extern bool state_initialised;
 void update_device_map_state();
+std::ostream &operator<<(std::ostream &o, MapState &state);
 
 #endif

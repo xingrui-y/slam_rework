@@ -11,13 +11,10 @@
 class SlamSystem
 {
 public:
-  SlamSystem(const IntrinsicMatrix &K);
-  void update(const cv::Mat &image, const cv::Mat &intensity, const cv::Mat &depth, const unsigned long id, const double time_stamp);
+  SlamSystem(const IntrinsicMatrixPyramidPtr &intrinsic_pyr);
+  void update(const cv::Mat &image, const cv::Mat &depth_float, const ulong &id, const double &time_stamp);
 
-  RgbdFramePtr get_current_frame() const;
-  Sophus::SE3d get_current_pose() const;
-  std::vector<Sophus::SE3d> get_camera_trajectory() const;
-  void set_initial_pose(const Sophus::SE3d &pose);
+  RgbdImagePtr get_current_image() const;
 
 private:
   class SlamSystemImpl;

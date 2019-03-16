@@ -15,8 +15,8 @@ struct TrackingResult
 struct TrackingContext
 {
   bool use_initial_guess_;
-  IntrinsicMatrixPyramid intrinsics_;
-  std::vector<int> tracking_level_;
+  IntrinsicMatrixPyramidPtr intrinsics_pyr_;
+  std::vector<int> max_iterations_;
   Sophus::SE3d initial_estimate_;
 };
 
@@ -24,7 +24,7 @@ class DenseTracking
 {
 public:
   DenseTracking();
-  TrackingResult track(const RgbdFramePtr reference, const RgbdFramePtr current, const TrackingContext &c);
+  TrackingResult compute_transform(const RgbdImagePtr reference, const RgbdImagePtr current, const TrackingContext &c);
 
 private:
   class DenseTrackingImpl;

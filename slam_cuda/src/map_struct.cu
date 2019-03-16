@@ -16,14 +16,19 @@ void update_device_map_state()
 
 MapStruct::MapStruct(const int &n_buckets, const int &n_entries, const int &n_blocks, const float &voxel_size)
 {
+    assert(n_entries > n_buckets);
+
     state.num_total_buckets_ = n_buckets;
     state.num_total_hash_entries_ = n_entries;
     state.voxel_size_ = voxel_size;
     state.num_total_voxel_blocks_ = n_blocks;
-    state.zmax_raycast_ = state.zmax_update_ = 3.0f;
-    state.zmin_raycast_ = state.zmin_update_ = 0.1f;
+    state.zmax_raycast_ = 3.0f;
+    state.zmax_update_ = 3.0f;
+    state.zmin_raycast_ = 0.1f;
+    state.zmin_update_ = 0.1f;
     state.num_max_rendering_blocks_ = 260000;
     state.num_max_mesh_triangles_ = 20000000;
+
     update_device_map_state();
 }
 
@@ -71,6 +76,7 @@ __global__ void reset_hash_entries_kernel(HashEntry *hash_table, int max_num)
         return;
 
     hash_table[index].ptr_ = -1;
+    hash_table[index].offset_ = -1;
 }
 
 __global__ void reset_heap_memory_kernel(int *heap, int *heap_counter)
@@ -129,7 +135,18 @@ void MapStruct::get_rendering_block_count(uint &count) const
     safe_call(cudaMemcpy(&count, rendering_block_count, sizeof(uint), cudaMemcpyDeviceToHost));
 }
 
-#ifdef __CUDACC__
+std::ostream &operator<<(std::ostream &o, MapState &state)
+{
+    o << "========================================\n"
+      << "Current Map Parameters:\n"
+      << "Total Number of Buckets: " << state.num_total_buckets_ << "\n"
+      << "Total Number of Hash Entries: " << state.num_total_hash_entries_ << "\n"
+      << "Total Number of Voxels: " << state.num_total_voxel_blocks_ * BLOCK_SIZE3 << "\n"
+      << "Voxel Size: " << state.voxel_size_ << " metres\n"
+      << "========================================";
+
+    return o;
+}
 
 __device__ __host__ int MapState::num_total_voxels() const
 {
@@ -264,7 +281,7 @@ __device__ void MapStruct::create_block(const int3 &block_pos)
     if (current->pos_ == block_pos && current->ptr_ != -1)
         return;
 
-    if (current->ptr_ == -1 && !empty_entry)
+    if (current->ptr_ == -1)
         empty_entry = current;
 
     while (current->offset_ > 0)
@@ -387,5 +404,3 @@ __device__ int3 MapStruct::local_idx_to_local_pos(const int &idx) const
     uint z = idx / (BLOCK_SIZE * BLOCK_SIZE);
     return make_int3(x, y, z);
 }
-
-#endif

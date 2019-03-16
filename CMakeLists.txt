@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.4)
+cmake_minimum_required(VERSION 3.10)
 project(slam VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 11)
@@ -24,6 +24,5 @@ include_directories(/usr/include/suitesparse/)
 add_subdirectory(slam_util)
 add_subdirectory(slam_cuda)
 add_subdirectory(slam_core)
-add_subdirectory(slam_map)
 add_subdirectory(slam_gui)
 add_subdirectory(slam_app)

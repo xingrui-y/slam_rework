@@ -1,6 +1,7 @@
 #include "device_map_ops.h"
 #include "vector_math.h"
 #include "cuda_utils.h"
+#include <opencv2/opencv.hpp>
 #include <opencv2/cudaarithm.hpp>
 
 namespace slam
@@ -74,7 +75,7 @@ struct MapUpdateDelegate
     cv::cuda::PtrStep<uchar3> rgb;
     cv::cuda::PtrStep<float> depth;
 
-    __device__ __forceinline__ float2 project_to_image(const float3 &pt) const
+    __device__ __forceinline__ float2 project_to_image(float3 &pt) const
     {
         return make_float2(fx * pt.x / pt.z + cx, fy * pt.y / pt.z + cy);
     }
@@ -145,7 +146,7 @@ struct MapUpdateDelegate
     {
         const int x = threadIdx.x + blockDim.x * blockIdx.x;
         const int y = threadIdx.y + blockDim.y * blockIdx.y;
-        if (x >= width && y >= height)
+        if (x >= width || y >= height)
             return;
 
         const float z = depth.ptr(y)[x];
@@ -163,11 +164,13 @@ struct MapUpdateDelegate
         float3 dir = pt_far - pt_near;
 
         float len_dir = norm(dir);
+
         int num_steps = (int)ceil(2.0 * len_dir);
         dir = dir / (float)(num_steps - 1);
-
         for (int step = 0; step < num_steps; ++step, pt_near += dir)
+        {
             map_struct.create_block(map_struct.voxel_pos_to_block_pos(make_int3(pt_near)));
+        }
     }
 
     template <bool reverse = false>
@@ -182,14 +185,14 @@ struct MapUpdateDelegate
 
         int3 block_pos = map_struct.block_pos_to_voxel_pos(entry.pos_);
         float truncation_dist = param.truncation_dist();
-        float inv_trunc_dist = 1.0 / truncation_dist;
 
 #pragma unroll
         for (int block_idx_z = 0; block_idx_z < BLOCK_SIZE; ++block_idx_z)
         {
             int3 local_pos = make_int3(threadIdx.x, threadIdx.y, block_idx_z);
             float3 pt = map_struct.voxel_pos_to_world_pt(block_pos + local_pos);
-            int2 uv = make_int2(project_to_image(inv_pose(pt)) + make_float2(0.5, 0.5));
+            pt = inv_pose(pt);
+            int2 uv = make_int2(project_to_image(pt) + make_float2(0.5, 0.5));
             if (uv.x < 0 || uv.y < 0 || uv.x > width - 1 || uv.y > height - 1)
                 continue;
 
@@ -200,29 +203,30 @@ struct MapUpdateDelegate
             float sdf = z - pt.z;
             if (sdf >= -truncation_dist)
             {
-                sdf = fmin(1.0f, sdf * inv_trunc_dist);
+                sdf = fmin(1.0f, sdf / truncation_dist);
                 const int local_idx = map_struct.local_pos_to_local_idx(local_pos);
                 float3 new_rgb = make_float3(rgb.ptr(uv.y)[uv.x]);
                 Voxel &prev = map_struct.voxels_[entry.ptr_ + local_idx];
 
                 if (!reverse)
                 {
-                    prev.sdf_ = (prev.sdf_ * prev.weight_ + sdf) / (prev.weight_ + 1);
-                    prev.rgb_ = make_uchar3((0.2f * new_rgb + 0.8f * make_float3(prev.rgb_)));
-                    prev.weight_++;
-                }
-                else
-                {
-                    if ((prev.weight_ - 1) != 0)
+                    if (prev.weight_ == 0)
                     {
-                        prev.sdf_ = (prev.sdf_ * prev.weight_ - sdf) / (prev.weight_ - 1);
-                        prev.rgb_ = make_uchar3((make_float3(prev.rgb_) - 0.2 * new_rgb) * 1.25f);
-                        prev.weight_--;
+                        prev = Voxel(sdf, (short)1, rgb.ptr(uv.y)[uv.x]);
                     }
                     else
                     {
-                        prev.weight_ = 0;
+                        prev.sdf_ = (prev.sdf_ * prev.weight_ + sdf) / (prev.weight_ + 1);
+                        // prev.rgb_ = make_uchar3((0.2f * new_rgb + 0.8f * make_float3(prev.rgb_)));
+                        prev.weight_++;
                     }
+                }
+                else
+                {
+
+                    prev.sdf_ = (prev.sdf_ * prev.weight_ - sdf) / (prev.weight_ - 1);
+                    // prev.rgb_ = make_uchar3((make_float3(prev.rgb_) - 0.2 * new_rgb) * 1.25f);
+                    prev.weight_--;
                 }
             }
         }
@@ -278,27 +282,26 @@ __global__ void update_map_with_image_kernel(MapUpdateDelegate delegate)
     delegate.update_map_with_image<reverse>();
 }
 
-void update(const cv::cuda::GpuMat depth,
+void update(MapStruct map_struct,
+            const cv::cuda::GpuMat depth,
             const cv::cuda::GpuMat image,
-            MapStruct &map_struct,
             const Sophus::SE3d &frame_pose,
-            const IntrinsicMatrixPtr intrinsic_matrix,
+            const IntrinsicMatrix intrinsic_matrix,
             uint &visible_block_count)
 {
+    map_struct.reset_visible_block_count();
+
     const int cols = depth.cols;
     const int rows = depth.rows;
 
-    map_struct.reset_visible_block_count();
     MapUpdateDelegate delegate;
     delegate.map_struct = map_struct;
     delegate.pose = frame_pose;
     delegate.inv_pose = frame_pose.inverse();
-    delegate.fx = intrinsic_matrix->fx;
-    delegate.fy = intrinsic_matrix->fy;
-    delegate.cx = intrinsic_matrix->cx;
-    delegate.cy = intrinsic_matrix->cy;
-    delegate.invfx = 1.0 / intrinsic_matrix->fx;
-    delegate.invfy = 1.0 / intrinsic_matrix->fy;
+    delegate.invfx = intrinsic_matrix.invfx;
+    delegate.invfy = intrinsic_matrix.invfy;
+    delegate.cx = intrinsic_matrix.cx;
+    delegate.cy = intrinsic_matrix.cy;
     delegate.depth = depth;
     delegate.rgb = image;
     delegate.height = rows;

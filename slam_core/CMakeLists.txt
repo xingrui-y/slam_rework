@@ -1,13 +1,14 @@
-project(slam_core)
+cmake_minimum_required(VERSION 3.10)
+project(slam_core LANGUAGES CXX CUDA)
 
 add_library(${PROJECT_NAME} SHARED "")
 
 target_include_directories(${PROJECT_NAME}
 PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
-PRIVATE
     ${slam_cuda_INCLUDE_DIRS}
     ${slam_util_INCLUDE_DIRS}
+    ${CUDA_INCLUDE_DIRS}
 )
 
 target_sources(${PROJECT_NAME}
@@ -16,20 +17,18 @@ PRIVATE
     src/dense_tracking.cpp
     src/dense_odometry.cpp
     src/slam_system.cpp
-    src/device_frame.cpp
-    src/keyframe_graph.cpp
-    src/pose_struct.cpp
+    src/dense_mapping.cpp
 )
 
 target_link_libraries(${PROJECT_NAME}
     slam_util
     slam_cuda
     Eigen3::Eigen
-    g2o_core
-    g2o_stuff
-    g2o_types_sba
-    g2o_solver_dense
-    g2o_solver_cholmod
+    # g2o_core
+    # g2o_stuff
+    # g2o_types_sba
+    # g2o_solver_dense
+    # g2o_solver_cholmod
     ${CERES_LIBRARIES}
     ${OpenCV_LIBRARIES}
 )

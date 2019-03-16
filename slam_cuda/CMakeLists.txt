@@ -1,4 +1,5 @@
-project(slam_cuda CXX CUDA)
+cmake_minimum_required(VERSION 3.10)
+project(slam_cuda LANGUAGES CXX CUDA)
 
 add_library(${PROJECT_NAME} SHARED "")
 
@@ -12,18 +13,16 @@ PRIVATE
     src/image_ops.cu
 )
 
-#find_package(CUDA 9.2 REQUIRED)
-
 target_include_directories(${PROJECT_NAME}
 PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CUDA_INCLUDE_DIRS}
     ${slam_util_INCLUDE_DIRS}
 )
 
 set_target_properties(${PROJECT_NAME} 
 PROPERTIES 
     CUDA_SEPARABLE_COMPILATION ON
+    POSITION_INDEPENDENT_CODE ON
     CUDA_STANDARD 11
 )
 
@@ -32,18 +31,14 @@ PRIVATE
     Eigen3::Eigen
 )
 
-target_compile_options(${PROJECT_NAME}
-PRIVATE
-)
-
 set(${PROJECT_NAME}_INCLUDE_DIRS ${PROJECT_SOURCE_DIR}/include CACHE INTERNAL "" FORCE)
 
-add_executable(unitest_cuda "")
+cuda_add_executable(unitest_cuda "")
 
 target_include_directories(unitest_cuda
 PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CUDA_INCLUDE_DIRS}
+    ${OpenCV_INCLUDE_DIRS}
 )
 
 target_sources(unitest_cuda
@@ -51,6 +46,16 @@ PRIVATE
     test/unit_test.cpp
 )
 
+set_target_properties(unitest_cuda
+PROPERTIES 
+    CUDA_SEPARABLE_COMPILATION ON
+    POSITION_INDEPENDENT_CODE ON
+    CUDA_STANDARD 11
+)
+
 target_link_libraries(unitest_cuda
+    ${OpenCV_LIBRARIES}
+    Eigen3::Eigen
     slam_cuda
+    slam_util
 )
