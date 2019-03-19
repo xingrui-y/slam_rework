@@ -180,6 +180,13 @@ __host__ __device__ __forceinline__ void operator+=(float3 &a, float3 b)
     a.z += b.z;
 }
 
+__host__ __device__ __forceinline__ void operator-=(int3 &a, int3 b)
+{
+    a.x -= b.x;
+    a.y -= b.y;
+    a.z -= b.z;
+}
+
 __host__ __device__ __forceinline__ void operator-=(float3 &a, float3 b)
 {
     a.x -= b.x;
@@ -220,6 +227,11 @@ __host__ __device__ __forceinline__ float3 operator-(float3 a, float b)
 __host__ __device__ __forceinline__ float3 operator-(float a, float3 b)
 {
     return make_float3(a - b.x, a - b.y, a - b.z);
+}
+
+__host__ __device__ __forceinline__ int3 operator-(int3 a, int3 b)
+{
+    return make_int3(a.x - b.x, a.y - b.y, a.z - b.z);
 }
 
 __host__ __device__ __forceinline__ float3 operator-(float3 a, float3 b)

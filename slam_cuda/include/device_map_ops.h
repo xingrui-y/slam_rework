@@ -5,6 +5,7 @@
 #include "intrinsic_matrix.h"
 #include <sophus/se3.hpp>
 #include <opencv2/cudaarithm.hpp>
+#include <thrust/device_vector.h>
 
 namespace slam
 {
@@ -14,8 +15,11 @@ namespace map
 void update(MapStruct map_struct,
             const cv::cuda::GpuMat depth,
             const cv::cuda::GpuMat image,
+            const cv::cuda::GpuMat normal,
             const Sophus::SE3d &frame_pose,
-            const IntrinsicMatrix intrinsic_matrix,
+            const IntrinsicMatrix K,
+            cv::cuda::GpuMat &cv_flag,
+            cv::cuda::GpuMat &cv_pos_array,
             uint &visible_block_count);
 
 void create_rendering_blocks(MapStruct map_struct,

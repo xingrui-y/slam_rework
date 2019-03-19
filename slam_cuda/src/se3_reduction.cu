@@ -58,7 +58,7 @@ struct RgbReduction
 {
     __device__ bool find_corresp(int &x, int &y)
     {
-        p_transformed = pose(point_cloud.ptr(y)[x]);
+        p_transformed = pose(make_float3(point_cloud.ptr(y)[x]));
         u0 = p_transformed.x / p_transformed.z * fx + cx;
         v0 = p_transformed.y / p_transformed.z * fy + cy;
         if (u0 >= 0 && u0 < cols - 1 && v0 >= 0 && v0 < rows - 1)
@@ -139,7 +139,7 @@ struct RgbReduction
     float u0, v0;
     DeviceMatrix3x4 pose;
     float fx, fy, cx, cy, invfx, invfy;
-    cv::cuda::PtrStep<float3> point_cloud, last_vmap;
+    cv::cuda::PtrStep<float4> point_cloud, last_vmap;
     cv::cuda::PtrStep<float> last_image, curr_image;
     cv::cuda::PtrStep<float> dIdx, dIdy;
     cv::cuda::PtrStep<float> out;
@@ -163,7 +163,7 @@ void rgb_reduce(const cv::cuda::GpuMat &curr_intensity,
                 cv::cuda::GpuMat &sum,
                 cv::cuda::GpuMat &out,
                 const Sophus::SE3d &pose,
-                const IntrinsicMatrixPtr K,
+                const IntrinsicMatrix K,
                 float *jtj, float *jtr,
                 float *residual)
 {
@@ -181,12 +181,12 @@ void rgb_reduce(const cv::cuda::GpuMat &curr_intensity,
     rr.dIdx = intensity_dx;
     rr.dIdy = intensity_dy;
     rr.pose = pose;
-    rr.fx = K->fx;
-    rr.fy = K->fy;
-    rr.cx = K->cx;
-    rr.cy = K->cy;
-    rr.invfx = 1.0 / K->fx;
-    rr.invfy = 1.0 / K->fy;
+    rr.fx = K.fx;
+    rr.fy = K.fy;
+    rr.cx = K.cx;
+    rr.cy = K.cy;
+    rr.invfx = 1.0 / K.fx;
+    rr.invfy = 1.0 / K.fy;
     rr.out = sum;
 
     rgb_reduce_kernel<<<96, 224>>>(rr);
@@ -210,7 +210,7 @@ struct ICPReduction
     __device__ __inline__ bool searchPoint(int &x, int &y, float3 &vcurr_g, float3 &vlast_g, float3 &nlast_g) const
     {
 
-        float3 vcurr_c = curr_vmap_.ptr(y)[x];
+        float3 vcurr_c = make_float3(curr_vmap_.ptr(y)[x]);
         if (isnan(vcurr_c.x))
             return false;
 
@@ -222,12 +222,12 @@ struct ICPReduction
         if (u < 0 || v < 0 || u >= cols || v >= rows)
             return false;
 
-        vlast_g = last_vmap_.ptr(v)[u];
+        vlast_g = make_float3(last_vmap_.ptr(v)[u]);
 
-        float3 ncurr_c = curr_nmap_.ptr(y)[x];
+        float3 ncurr_c = make_float3(curr_nmap_.ptr(y)[x]);
         float3 ncurr_g = pose.rotate(ncurr_c);
 
-        nlast_g = last_nmap_.ptr(v)[u];
+        nlast_g = make_float3(last_nmap_.ptr(v)[u]);
 
         float dist = norm(vlast_g - vcurr_g);
         float sine = norm(cross(ncurr_g, nlast_g));
@@ -294,8 +294,8 @@ struct ICPReduction
     }
 
     DeviceMatrix3x4 pose;
-    cv::cuda::PtrStep<float3> curr_vmap_, last_vmap_;
-    cv::cuda::PtrStep<float3> curr_nmap_, last_nmap_;
+    cv::cuda::PtrStep<float4> curr_vmap_, last_vmap_;
+    cv::cuda::PtrStep<float4> curr_nmap_, last_nmap_;
     int cols, rows, N;
     float fx, fy, cx, cy;
     float angleThresh, distThresh;
@@ -314,7 +314,7 @@ void icp_reduce(const cv::cuda::GpuMat &curr_vmap,
                 cv::cuda::GpuMat &sum,
                 cv::cuda::GpuMat &out,
                 const Sophus::SE3d &pose,
-                const IntrinsicMatrixPtr K,
+                const IntrinsicMatrix K,
                 float *jtj, float *jtr,
                 float *residual)
 {
@@ -333,23 +333,88 @@ void icp_reduce(const cv::cuda::GpuMat &curr_vmap,
     icp.pose = pose;
     icp.angleThresh = 0.6;
     icp.distThresh = 0.1;
-    icp.fx = K->fx;
-    icp.fy = K->fy;
-    icp.cx = K->cx;
-    icp.cy = K->cy;
+    icp.fx = K.fx;
+    icp.fy = K.fy;
+    icp.cx = K.cx;
+    icp.cy = K.cy;
 
     icp_reduce_kernel<<<96, 224>>>(icp);
-
-    safe_call(cudaDeviceSynchronize());
-    safe_call(cudaGetLastError());
-
     cv::cuda::reduce(sum, out, 0, cv::REDUCE_SUM);
-    safe_call(cudaDeviceSynchronize());
-    safe_call(cudaGetLastError());
 
     cv::Mat host_data;
     out.download(host_data);
     create_jtjjtr<6, 7>(host_data, jtj, jtr);
     residual[0] = host_data.ptr<float>()[27];
     residual[1] = host_data.ptr<float>()[28];
+}
+
+__device__ __inline__ bool find_corresp(float3 pt, cv::cuda::PtrStep<float4> last_vmap, float3 &v_last, float3 &n_last,
+                                        cv::cuda::PtrStep<float4> curr_nmap, cv::cuda::PtrStep<float4> last_nmap,
+                                        DeviceIntrinsicMatrix intrinsics, int cols, int rows)
+{
+    int u = __float2int_rd(intrinsics.fx * pt.x / pt.z + intrinsics.cx + 0.5f);
+    int v = __float2int_rd(intrinsics.fy * pt.y / pt.z + intrinsics.cy + 0.5f);
+    if (u < 0 || v < 0 || u >= cols || v >= rows)
+        return false;
+
+    v_last = make_float3(last_vmap.ptr(v)[u]);
+    n_last = make_float3(last_nmap.ptr(v)[u]);
+
+    return true;
+}
+
+__global__ void compute_icp_residual_kernel(cv::cuda::PtrStepSz<float4> curr_vmap, cv::cuda::PtrStep<float4> last_vmap,
+                                            cv::cuda::PtrStep<float4> curr_nmap, cv::cuda::PtrStep<float4> last_nmap,
+                                            DeviceMatrix3x4 pose_curr_to_last, DeviceIntrinsicMatrix intrinsics,
+                                            cv::cuda::PtrStepSz<float> jacobian, cv::cuda::PtrStepSz<float> residual,
+                                            cv::cuda::PtrStep<uchar> mask)
+{
+    const int x = threadIdx.x + blockDim.x * blockIdx.x;
+    const int y = threadIdx.y + blockDim.y * blockIdx.y;
+    if (x >= curr_vmap.cols || y >= curr_vmap.rows)
+        return;
+
+    float3 pt = pose_curr_to_last(make_float3(curr_vmap.ptr(y)[x]));
+    float3 v_last, n_last;
+    bool correp_found = find_corresp(pt, last_vmap, v_last, n_last, curr_nmap, last_nmap, intrinsics, curr_vmap.cols, curr_vmap.rows);
+    int row_ptr = y * curr_vmap.rows + x;
+    if (correp_found)
+    {
+        float3 cross_v_n = cross(v_last, n_last);
+        jacobian.ptr(row_ptr)[0] = n_last.x;
+        jacobian.ptr(row_ptr)[1] = n_last.y;
+        jacobian.ptr(row_ptr)[2] = n_last.z;
+        jacobian.ptr(row_ptr)[3] = cross_v_n.x;
+        jacobian.ptr(row_ptr)[4] = cross_v_n.y;
+        jacobian.ptr(row_ptr)[5] = cross_v_n.z;
+        residual.ptr(row_ptr)[0] = -n_last * (pt - v_last);
+        mask.ptr(row_ptr)[0] = 1.f;
+    }
+    else
+    {
+        mask.ptr(row_ptr)[0] = 1.f;
+    }
+}
+
+void compute_icp_residual(const cv::cuda::GpuMat &curr_vmap,
+                          const cv::cuda::GpuMat &curr_nmap,
+                          const cv::cuda::GpuMat &last_vmap,
+                          const cv::cuda::GpuMat &last_nmap)
+{
+    const int cols = curr_vmap.cols;
+    const int rows = curr_vmap.rows;
+
+    cv::cuda::GpuMat residual;
+    cv::cuda::GpuMat jacobian;
+    cv::cuda::GpuMat mask;
+    cv::cuda::GpuMat sum_jacobian;
+
+    residual.create(cols * rows, 1, CV_32FC1);
+    jacobian.create(cols * rows, 6, CV_32FC1);
+    mask.create(cols * rows, 1, CV_8UC1);
+
+    double min_val, max_val;
+    cv::cuda::minMax(residual, &min_val, &max_val, mask);
+    cv::cuda::transpose(jacobian, jacobian);
+    cv::cuda::multiply(jacobian, jacobian, sum_jacobian);
 }

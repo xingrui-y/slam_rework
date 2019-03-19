@@ -12,6 +12,8 @@ public:
 
   RgbdImagePtr get_current_image() const;
   RgbdImagePtr get_reference_image() const;
+  void set_initial_pose(const Sophus::SE3d pose);
+  std::vector<Sophus::SE3d> get_camera_trajectory() const;
 
 private:
   class DenseOdometryImpl;

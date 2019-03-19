@@ -39,3 +39,18 @@ RgbdImagePtr SlamSystem::get_current_image() const
 {
   return impl->odometry_->get_current_image();
 }
+
+RgbdImagePtr SlamSystem::get_reference_image() const
+{
+  return impl->odometry_->get_reference_image();
+}
+
+std::vector<Sophus::SE3d> SlamSystem::get_camera_trajectory() const
+{
+  return impl->odometry_->get_camera_trajectory();
+}
+
+void SlamSystem::set_initial_pose(const Sophus::SE3d pose)
+{
+  impl->odometry_->set_initial_pose(pose);
+}

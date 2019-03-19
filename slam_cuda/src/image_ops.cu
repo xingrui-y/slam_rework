@@ -2,12 +2,21 @@
 #include "cuda_utils.h"
 #include "vector_math.h"
 #include "intrinsic_matrix.h"
+#include <opencv2/opencv.hpp>
 #include <opencv2/cudawarping.hpp>
 
 namespace slam
 {
 namespace cuda
 {
+
+static inline void imshow(const char *name, const cv::cuda::GpuMat image)
+{
+    cv::Mat image_cpu;
+    image.download(image_cpu);
+    cv::imshow(name, image_cpu);
+    cv::waitKey(0);
+}
 
 void build_depth_pyramid(const cv::cuda::GpuMat &base_depth, std::vector<cv::cuda::GpuMat> &pyramid, const int &max_level)
 {
@@ -147,9 +156,74 @@ void build_normal_pyramid(const std::vector<cv::cuda::GpuMat> &vmap_pyr, std::ve
 
         compute_nmap_kernel<<<block, thread>>>(vmap, nmap);
     }
+}
 
-    safe_call(cudaDeviceSynchronize());
-    safe_call(cudaGetLastError());
+void resize_device_map(std::vector<cv::cuda::GpuMat> &map_pyr)
+{
+    for (int level = 1; level < map_pyr.size(); ++level)
+    {
+        cv::cuda::resize(map_pyr[level - 1], map_pyr[level], cv::Size(), 0.5, 0.5);
+    }
+}
+
+__global__ void image_rendering_phong_shading_kernel(const cv::cuda::PtrStep<float4> vmap, const cv::cuda::PtrStep<float4> nmap, const float3 light_pos, cv::cuda::PtrStepSz<uchar4> dst)
+{
+    const int x = threadIdx.x + blockIdx.x * blockDim.x;
+    const int y = threadIdx.y + blockIdx.y * blockDim.y;
+    if (x >= dst.cols || y >= dst.rows)
+        return;
+
+    float3 color;
+    float3 point = make_float3(vmap.ptr(y)[x]);
+    if (isnan(point.x))
+    {
+        const float3 bgr1 = make_float3(4.f / 255.f, 2.f / 255.f, 2.f / 255.f);
+        const float3 bgr2 = make_float3(236.f / 255.f, 120.f / 255.f,
+                                        120.f / 255.f);
+
+        float w = static_cast<float>(y) / dst.rows;
+        color = bgr1 * (1 - w) + bgr2 * w;
+    }
+    else
+    {
+        float3 P = point;
+        float3 N = make_float3(nmap.ptr(y)[x]);
+
+        const float Ka = 0.3f; //ambient coeff
+        const float Kd = 0.5f; //diffuse coeff
+        const float Ks = 0.2f; //specular coeff
+        const float n = 20.f;  //specular power
+
+        const float Ax = 1.f; //ambient color,  can be RGB
+        const float Dx = 1.f; //diffuse color,  can be RGB
+        const float Sx = 1.f; //specular color, can be RGB
+        const float Lx = 1.f; //light color
+
+        float3 L = normalised(light_pos - P);
+        float3 V = normalised(make_float3(0.f, 0.f, 0.f) - P);
+        float3 R = normalised(2 * N * (N * L) - L);
+
+        float Ix = Ax * Ka * Dx + Lx * Kd * Dx * fmax(0.f, (N * L)) + Lx * Ks * Sx * pow(fmax(0.f, (R * V)), n);
+        color = make_float3(Ix, Ix, Ix);
+    }
+
+    uchar4 out;
+    out.x = static_cast<unsigned char>(__saturatef(color.x) * 255.f);
+    out.y = static_cast<unsigned char>(__saturatef(color.y) * 255.f);
+    out.z = static_cast<unsigned char>(__saturatef(color.z) * 255.f);
+    out.w = 255.0;
+    dst.ptr(y)[x] = out;
+}
+
+void image_rendering_phong_shading(const cv::cuda::GpuMat vmap, const cv::cuda::GpuMat nmap, cv::cuda::GpuMat &image)
+{
+    dim3 thread(8, 4);
+    dim3 block(div_up(vmap.cols, thread.x), div_up(vmap.rows, thread.y));
+
+    if (image.empty())
+        image.create(vmap.rows, vmap.cols, CV_8UC4);
+
+    image_rendering_phong_shading_kernel<<<block, thread>>>(vmap, nmap, make_float3(0, 0, 0), image);
 }
 
 } // namespace cuda

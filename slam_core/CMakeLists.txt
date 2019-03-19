@@ -18,6 +18,8 @@ PRIVATE
     src/dense_odometry.cpp
     src/slam_system.cpp
     src/dense_mapping.cpp
+    src/point_struct.cpp
+    src/bundle_adjuster.cpp
 )
 
 target_link_libraries(${PROJECT_NAME}
@@ -31,6 +33,7 @@ target_link_libraries(${PROJECT_NAME}
     # g2o_solver_cholmod
     ${CERES_LIBRARIES}
     ${OpenCV_LIBRARIES}
+    ${CUDA_LIBRARIES}
 )
 
 set(${PROJECT_NAME}_INCLUDE_DIRS ${PROJECT_SOURCE_DIR}/include CACHE INTERNAL "" FORCE)

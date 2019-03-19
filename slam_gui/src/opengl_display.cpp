@@ -244,7 +244,7 @@ void GlDisplay::set_ground_truth_trajectory(const std::vector<Sophus::SE3d> &gt)
     impl->ground_truth = gt;
 }
 
-void GlDisplay::set_camera_trajectory(const std::vector<Sophus::SE3d> &camera)
+void GlDisplay::set_camera_trajectory(const std::vector<Sophus::SE3d> camera)
 {
     impl->camera_trajectory = camera;
 }

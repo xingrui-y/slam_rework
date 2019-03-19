@@ -38,6 +38,11 @@ int IntrinsicMatrixPyramid::get_max_level() const
     return pyramid_.size();
 }
 
+IntrinsicMatrix IntrinsicMatrixPyramid::get_intrinsic_matrix_at(const int &level) const
+{
+    return *pyramid_[level];
+}
+
 std::ostream &operator<<(std::ostream &o, IntrinsicMatrix &K)
 {
     o << "fx : " << K.fx << " , "

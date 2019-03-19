@@ -137,14 +137,6 @@ void MapStruct::get_rendering_block_count(uint &count) const
 
 std::ostream &operator<<(std::ostream &o, MapState &state)
 {
-    o << "========================================\n"
-      << "Current Map Parameters:\n"
-      << "Total Number of Buckets: " << state.num_total_buckets_ << "\n"
-      << "Total Number of Hash Entries: " << state.num_total_hash_entries_ << "\n"
-      << "Total Number of Voxels: " << state.num_total_voxel_blocks_ * BLOCK_SIZE3 << "\n"
-      << "Voxel Size: " << state.voxel_size_ << " metres\n"
-      << "========================================";
-
     return o;
 }
 
@@ -217,22 +209,34 @@ __device__ Voxel::Voxel() : sdf_(0), weight_(0)
 {
 }
 
-__device__ Voxel::Voxel(float sdf, short weight, uchar3 rgb) : sdf_(sdf), weight_(weight), rgb_(rgb)
+__device__ float unpack_float(short val)
 {
+    return val / (float)32767;
 }
 
-__device__ void Voxel::getValue(float &sdf, uchar3 &color) const
+__device__ short pack_float(float val)
 {
-    sdf = this->sdf_;
-    color = this->rgb_;
+    return (short)(val * 32767);
 }
 
-__device__ Voxel &Voxel::operator=(const Voxel &other)
+__device__ float Voxel::get_sdf() const
 {
-    sdf_ = other.sdf_;
-    weight_ = other.weight_;
-    rgb_ = other.rgb_;
-    return *this;
+    return unpack_float(sdf_);
+}
+
+__device__ float Voxel::get_weight() const
+{
+    return weight_;
+}
+
+__device__ void Voxel::set_sdf(float val)
+{
+    sdf_ = pack_float(val);
+}
+
+__device__ void Voxel::set_weight(float val)
+{
+    weight_ = val;
 }
 
 __device__ bool MapStruct::lock_bucket(int *mutex)
@@ -257,6 +261,22 @@ __device__ int MapStruct::compute_hash(const int3 &pos) const
     return res;
 }
 
+__device__ bool MapStruct::delete_entry(HashEntry &current)
+{
+    int old = atomicAdd(heap_mem_counter_, 1);
+    if (old < param.num_total_voxel_blocks_ - 1)
+    {
+        heap_mem_[old + 1] = current.ptr_ / BLOCK_SIZE3;
+        current.ptr_ = -1;
+        return true;
+    }
+    else
+    {
+        atomicSub(heap_mem_counter_, 1);
+        return false;
+    }
+}
+
 __device__ bool MapStruct::create_entry(const int3 &pos, const int &offset, HashEntry *entry)
 {
     int old = atomicSub(heap_mem_counter_, 1);
@@ -269,12 +289,17 @@ __device__ bool MapStruct::create_entry(const int3 &pos, const int &offset, Hash
             return true;
         }
     }
+    else
+    {
+        atomicAdd(heap_mem_counter_, 1);
+    }
+
     return false;
 }
 
-__device__ void MapStruct::create_block(const int3 &block_pos)
+__device__ void MapStruct::create_block(const int3 &block_pos, int &bucket_index)
 {
-    int bucket_index = compute_hash(block_pos);
+    bucket_index = compute_hash(block_pos);
     int *mutex = &bucket_mutex_[bucket_index];
     HashEntry *current = &hash_table_[bucket_index];
     HashEntry *empty_entry = nullptr;
@@ -315,6 +340,46 @@ __device__ void MapStruct::create_block(const int3 &block_pos)
                     current->offset_ = offset;
             }
             unlock_bucket(mutex);
+        }
+    }
+}
+
+__device__ void MapStruct::delete_block(HashEntry &current)
+{
+    memset(&voxels_[current.ptr_], 0, sizeof(Voxel) * BLOCK_SIZE3);
+    int hash_id = compute_hash(current.pos_);
+    int *mutex = &bucket_mutex_[hash_id];
+    HashEntry *reference = &hash_table_[hash_id];
+    HashEntry *link_entry = nullptr;
+
+    // The entry to be deleted is the main entry
+    if (reference->pos_ == current.pos_ && reference->ptr_ != -1)
+    {
+        if (lock_bucket(mutex))
+        {
+            delete_entry(current);
+            unlock_bucket(mutex);
+            return;
+        }
+    }
+    // Search the linked list for the entry
+    else
+    {
+        while (reference->offset_ > 0)
+        {
+            hash_id = param.num_total_buckets_ + reference->offset_ - 1;
+            link_entry = reference;
+            reference = &hash_table_[hash_id];
+            if (reference->pos_ == current.pos_ && reference->ptr_ != -1)
+            {
+                if (lock_bucket(mutex))
+                {
+                    link_entry->offset_ = current.offset_;
+                    delete_entry(current);
+                    unlock_bucket(mutex);
+                    return;
+                }
+            }
         }
     }
 }

@@ -176,7 +176,7 @@ struct RenderingBlockDelegate
     {
         for (int y = 0; y < ny; ++y)
         {
-            for (int x = 0; x < ny; ++x)
+            for (int x = 0; x < nx; ++x)
             {
                 if (offset < param.num_max_rendering_blocks_)
                 {
@@ -340,7 +340,7 @@ struct MapRenderingDelegate
         if (voxel != nullptr)
         {
             valid = true;
-            return voxel->sdf_;
+            return voxel->get_sdf();
         }
         else
         {
@@ -536,10 +536,28 @@ void raycast(MapStruct map_struct,
     dim3 block(div_up(cols, thread.x), div_up(rows, thread.y));
 
     raycast_kernel<<<block, thread>>>(delegate);
-
-    safe_call(cudaGetLastError());
-    safe_call(cudaDeviceSynchronize());
 }
+
+// __global__ void create_rendering_block(HashEntry *visible_block, uint visible_block_count, int cols, int rows)
+// {
+//     const int idx = threadIdx.x + blockDim.x * blockIdx.x;
+//     if (idx >= visible_block_count)
+//         return;
+
+//     HashEntry &current = visible_block[idx];
+//     RenderingBlock block;
+//     block.upper_left = make_short2(cols, rows);
+//     block.lower_right = make_short2(0, 0);
+//     block.zrange = make_float2(param.zmax_raycast_, param.zmin_raycast_);
+
+//     for (int corner = 0; corner < 8; ++corner)
+//     {
+//         int3 tmp = current.pos_;
+//         tmp.x += (corner & 1) ? 1 : 0;
+//         tmp.y += (corner & 2) ? 1 : 0;
+//         tmp.z += (corner & 4) ? 1 : 0;
+//     }
+// }
 
 } // namespace map
 } // namespace slam

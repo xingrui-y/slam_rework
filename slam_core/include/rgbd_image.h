@@ -20,10 +20,18 @@ public:
   RgbdImage(const RgbdImage &) = delete;
   RgbdImage(const int &max_level);
 
+  void resize_device_map();
   void upload(const RgbdFramePtr frame, const IntrinsicMatrixPyramidPtr intrinsics_pyr);
+
   RgbdFramePtr get_reference_frame() const;
+  cv::cuda::GpuMat get_rendered_image() const;
   cv::cuda::GpuMat get_depth(const int &level = 0) const;
   cv::cuda::GpuMat get_image(const int &level = 0) const;
+  cv::cuda::GpuMat get_vmap(const int &level = 0) const;
+  cv::cuda::GpuMat get_nmap(const int &level = 0) const;
+  cv::cuda::GpuMat get_intensity(const int &level = 0) const;
+  cv::cuda::GpuMat get_intensity_dx(const int &level = 0) const;
+  cv::cuda::GpuMat get_intensity_dy(const int &level = 0) const;
 
 private:
   class RgbdImageImpl;

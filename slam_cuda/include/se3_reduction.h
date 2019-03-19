@@ -14,7 +14,7 @@ void rgb_reduce(const cv::cuda::GpuMat &curr_intensity,
                 cv::cuda::GpuMat &sum,
                 cv::cuda::GpuMat &out,
                 const Sophus::SE3d &pose,
-                const IntrinsicMatrixPtr K,
+                const IntrinsicMatrix K,
                 float *jtj, float *jtr,
                 float *residual);
 
@@ -25,7 +25,7 @@ void icp_reduce(const cv::cuda::GpuMat &curr_vmap,
                 cv::cuda::GpuMat &sum,
                 cv::cuda::GpuMat &out,
                 const Sophus::SE3d &pose,
-                const IntrinsicMatrixPtr K,
+                const IntrinsicMatrix K,
                 float *jtj, float *jtr,
                 float *residual);
 

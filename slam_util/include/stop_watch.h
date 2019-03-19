@@ -8,7 +8,7 @@
 class StopWatch
 {
   typedef std::chrono::high_resolution_clock clock;
-  typedef std::chrono::milliseconds milliseconds;
+  typedef std::chrono::microseconds milliseconds;
 
 public:
   StopWatch(bool run = false);

@@ -8,7 +8,8 @@ class DenseMapping
 {
 public:
   DenseMapping(const IntrinsicMatrixPyramidPtr &intrinsics_pyr);
-  void integrate_frame(RgbdImagePtr current_image);
+  void update(RgbdImagePtr image);
+  void raycast(RgbdImagePtr image);
 
 private:
   class DenseMappingImpl;

@@ -43,14 +43,15 @@ struct RenderingBlock
 
 struct Voxel
 {
-    float sdf_;
-    short weight_;
+    short sdf_;
+    float weight_;
     uchar3 rgb_;
 
     __device__ Voxel();
-    __device__ Voxel(float sdf, short weight, uchar3 rgb);
-    __device__ void getValue(float &sdf, uchar3 &rgb) const;
-    __device__ Voxel &operator=(const Voxel &other);
+    __device__ float get_sdf() const;
+    __device__ float get_weight() const;
+    __device__ void set_sdf(float val);
+    __device__ void set_weight(float val);
 };
 
 struct HashEntry
@@ -84,7 +85,9 @@ struct MapStruct
     __device__ int compute_hash(const int3 &pos) const;
     __device__ bool lock_bucket(int *mutex);
     __device__ void unlock_bucket(int *mutex);
-    __device__ void create_block(const int3 &blockPos);
+    __device__ bool delete_entry(HashEntry &current);
+    __device__ void create_block(const int3 &blockPos, int &bucket_index);
+    __device__ void delete_block(HashEntry &current);
     __device__ bool create_entry(const int3 &pos, const int &offset, HashEntry *entry);
     __device__ void find_voxel(const int3 &voxel_pos, Voxel *&out) const;
     __device__ void find_entry(const int3 &block_pos, HashEntry *&out) const;

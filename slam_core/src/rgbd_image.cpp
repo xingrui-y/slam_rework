@@ -10,9 +10,11 @@ class RgbdImage::RgbdImageImpl
 
     void resize_pyramid(const int &max_level);
     void upload(const RgbdFramePtr frame, const IntrinsicMatrixPyramidPtr intrinsics_pyr);
+    void render_synthetic_view();
 
     RgbdFramePtr reference_frame_;
     cv::cuda::GpuMat image_;
+    cv::cuda::GpuMat rendered_image_;
     cv::cuda::GpuMat image_float_;
     cv::cuda::GpuMat depth_float_;
     cv::cuda::GpuMat intensity_float_;
@@ -43,11 +45,40 @@ void RgbdImage::RgbdImageImpl::resize_pyramid(const int &max_level)
     normal_.resize(max_level);
 }
 
-static inline void imshow(const char *name, const cv::cuda::GpuMat image)
+void RgbdImage::RgbdImageImpl::render_synthetic_view()
 {
-    cv::Mat image_cpu;
-    image.download(image_cpu);
-    cv::imshow(name, image_cpu);
+    slam::cuda::image_rendering_phong_shading(point_cloud_[0], normal_[0], rendered_image_);
+}
+
+cv::cuda::GpuMat RgbdImage::get_vmap(const int &level) const
+{
+    return impl->point_cloud_[level];
+}
+
+cv::cuda::GpuMat RgbdImage::get_nmap(const int &level) const
+{
+    return impl->normal_[level];
+}
+
+cv::cuda::GpuMat RgbdImage::get_rendered_image() const
+{
+    impl->render_synthetic_view();
+    return impl->rendered_image_;
+}
+
+cv::cuda::GpuMat RgbdImage::get_intensity(const int &level) const
+{
+    return impl->intensity_[level];
+}
+
+cv::cuda::GpuMat RgbdImage::get_intensity_dx(const int &level) const
+{
+    return impl->intensity_dx_[level];
+}
+
+cv::cuda::GpuMat RgbdImage::get_intensity_dy(const int &level) const
+{
+    return impl->intensity_dy_[level];
 }
 
 void RgbdImage::RgbdImageImpl::upload(const RgbdFramePtr frame, const IntrinsicMatrixPyramidPtr intrinsics_pyr)
@@ -91,6 +122,12 @@ RgbdImage::RgbdImage(const int &max_level) : impl(new RgbdImageImpl(max_level))
 void RgbdImage::upload(const RgbdFramePtr frame, const IntrinsicMatrixPyramidPtr intrinsics_pyr)
 {
     impl->upload(frame, intrinsics_pyr);
+}
+
+void RgbdImage::resize_device_map()
+{
+    slam::cuda::resize_device_map(impl->point_cloud_);
+    slam::cuda::resize_device_map(impl->normal_);
 }
 
 cv::cuda::GpuMat RgbdImage::get_depth(const int &level) const

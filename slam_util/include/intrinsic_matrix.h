@@ -27,6 +27,7 @@ struct IntrinsicMatrixPyramid
     IntrinsicMatrixPtr operator[](int level) const;
     std::vector<IntrinsicMatrixPtr> pyramid_;
     int get_max_level() const;
+    IntrinsicMatrix get_intrinsic_matrix_at(const int &level) const;
 };
 
 std::ostream &operator<<(std::ostream &o, IntrinsicMatrix &K);
