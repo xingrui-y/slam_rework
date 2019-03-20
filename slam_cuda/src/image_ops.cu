@@ -10,7 +10,7 @@ namespace slam
 namespace cuda
 {
 
-static inline void imshow(const char *name, const cv::cuda::GpuMat image)
+void imshow(const char *name, const cv::cuda::GpuMat image)
 {
     cv::Mat image_cpu;
     image.download(image_cpu);
@@ -22,6 +22,7 @@ void build_depth_pyramid(const cv::cuda::GpuMat &base_depth, std::vector<cv::cud
 {
     assert(max_level == pyramid.size());
     base_depth.copyTo(pyramid[0]);
+    // cv::cuda::bilateralFilter(base_depth, pyramid[0], 2, 0.05, 0.02);
 
     for (int level = 1; level < max_level; ++level)
     {
@@ -178,8 +179,7 @@ __global__ void image_rendering_phong_shading_kernel(const cv::cuda::PtrStep<flo
     if (isnan(point.x))
     {
         const float3 bgr1 = make_float3(4.f / 255.f, 2.f / 255.f, 2.f / 255.f);
-        const float3 bgr2 = make_float3(236.f / 255.f, 120.f / 255.f,
-                                        120.f / 255.f);
+        const float3 bgr2 = make_float3(236.f / 255.f, 120.f / 255.f, 120.f / 255.f);
 
         float w = static_cast<float>(y) / dst.rows;
         color = bgr1 * (1 - w) + bgr2 * w;

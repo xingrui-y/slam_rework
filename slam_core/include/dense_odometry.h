@@ -8,12 +8,18 @@ class DenseOdometry
 {
 public:
   DenseOdometry(const IntrinsicMatrixPyramidPtr intrinsics_pyr);
-  void track(const cv::Mat &image, const cv::Mat &depth_float, const ulong &id, const double &time_stamp);
+  void track_frame(RgbdFramePtr current_frame);
+  bool keyframe_needed() const;
+  bool is_tracking_lost() const;
+  void create_keyframe();
+
+  std::vector<Sophus::SE3d> get_keyframe_poses() const;
+  std::vector<Sophus::SE3d> get_camera_trajectory() const;
 
   RgbdImagePtr get_current_image() const;
   RgbdImagePtr get_reference_image() const;
-  void set_initial_pose(const Sophus::SE3d pose);
-  std::vector<Sophus::SE3d> get_camera_trajectory() const;
+  RgbdFramePtr get_current_frame() const;
+  RgbdFramePtr get_current_keyframe() const;
 
 private:
   class DenseOdometryImpl;

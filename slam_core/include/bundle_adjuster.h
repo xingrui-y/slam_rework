@@ -6,14 +6,14 @@
 
 class BundleAdjuster
 {
-  public:
-    BundleAdjuster();
-    void set_up_bundler(std::vector<RgbdFramePtr> keyframe_list);
-    void run_bundle_adjust(int iteration) const;
+public:
+  BundleAdjuster();
+  void set_up_bundler(std::vector<RgbdFramePtr> keyframe_list);
+  void run_bundle_adjustment(int iteration) const;
 
-  private:
-    class BundleAdjusterImpl;
-    std::shared_ptr<BundleAdjusterImpl> impl;
+private:
+  class BundleAdjusterImpl;
+  std::shared_ptr<BundleAdjusterImpl> impl;
 };
 
 #endif

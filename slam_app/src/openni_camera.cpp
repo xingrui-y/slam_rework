@@ -18,10 +18,11 @@ class OpenNICamera::OpenNICameraImpl
     VideoFrameRef *depth_frame;
 
     int width, height, fps;
+    int id_;
 };
 
 OpenNICamera::OpenNICameraImpl::OpenNICameraImpl(int width, int height, int fps)
-    : width(width), height(height), fps(fps)
+    : width(width), height(height), fps(fps), id_(0)
 {
     if (OpenNI::initialize() != STATUS_OK)
     {
@@ -191,7 +192,7 @@ double OpenNICamera::get_current_timestamp() const
 
 unsigned int OpenNICamera::get_current_id() const
 {
-    return 0;
+    return impl->id_++;
 }
 
 std::vector<Sophus::SE3d> OpenNICamera::get_groundtruth() const

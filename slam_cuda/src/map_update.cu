@@ -256,7 +256,7 @@ __global__ void update_map_kernel(MapStruct map_struct, cv::cuda::PtrStepSz<floa
         float sdf_p = voxel.get_sdf();
         float weight_p = voxel.get_weight();
         float3 z_pole = make_float3(0, 0, 1.f);
-        float weight_c = abs(z_pole * make_float3(nmap.ptr(v)[u]));
+        float weight_c = abs(z_pole * make_float3(nmap.ptr(v)[u])) / (dist * dist);
 
         if (weight_p < 1e-3)
         {

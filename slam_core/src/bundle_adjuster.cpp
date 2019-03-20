@@ -18,6 +18,6 @@ void BundleAdjuster::set_up_bundler(std::vector<RgbdFramePtr> keyframe_list)
 {
 }
 
-void BundleAdjuster::run_bundle_adjust(int iteration) const
+void BundleAdjuster::run_bundle_adjustment(int iteration) const
 {
 }

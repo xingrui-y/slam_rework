@@ -24,7 +24,7 @@ public:
 
 DenseMapping::DenseMappingImpl::DenseMappingImpl(const IntrinsicMatrixPyramidPtr &intrinsics_pyr)
 {
-  map_struct_ = std::make_shared<MapStruct>(300000, 500000, 300000, 0.004f);
+  map_struct_ = std::make_shared<MapStruct>(300000, 450000, 100000, 0.004f);
   map_struct_->allocate_device_memory();
   map_struct_->reset_map_struct();
 

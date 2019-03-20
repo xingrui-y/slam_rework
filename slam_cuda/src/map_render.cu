@@ -172,7 +172,7 @@ struct RenderingBlockDelegate
         return true;
     }
 
-    __device__ __forceinline__ void create_rendering_block_list(int &offset, const RenderingBlock &block, int &nx, int &ny) const
+    __device__ __forceinline__ void create_rendering_block_list(int offset, const RenderingBlock &block, int &nx, int &ny) const
     {
         for (int y = 0; y < ny; ++y)
         {
@@ -181,11 +181,10 @@ struct RenderingBlockDelegate
                 if (offset < param.num_max_rendering_blocks_)
                 {
                     RenderingBlock &b(rendering_blocks[offset++]);
-
                     b.upper_left.x = block.upper_left.x + x * RENDERING_BLOCK_SIZE_X;
                     b.upper_left.y = block.upper_left.y + y * RENDERING_BLOCK_SIZE_Y;
-                    b.lower_right.x = block.upper_left.x + RENDERING_BLOCK_SIZE_X;
-                    b.lower_right.y = block.upper_left.y + RENDERING_BLOCK_SIZE_Y;
+                    b.lower_right.x = block.upper_left.x + (x + 1) * RENDERING_BLOCK_SIZE_X;
+                    b.lower_right.y = block.upper_left.y + (y + 1) * RENDERING_BLOCK_SIZE_Y;
 
                     if (b.lower_right.x > block.lower_right.x)
                         b.lower_right.x = block.lower_right.x;
@@ -314,7 +313,7 @@ void create_rendering_blocks(MapStruct map_struct,
     if (rendering_block_count == 0)
         return;
 
-    thread = dim3(8, 8);
+    thread = dim3(RENDERING_BLOCK_SIZE_X, RENDERING_BLOCK_SIZE_Y);
     block = dim3((uint)ceil((float)rendering_block_count / 4), 4);
 
     split_and_fill_rendering_blocks_kernel<<<block, thread>>>(delegate);
@@ -537,27 +536,6 @@ void raycast(MapStruct map_struct,
 
     raycast_kernel<<<block, thread>>>(delegate);
 }
-
-// __global__ void create_rendering_block(HashEntry *visible_block, uint visible_block_count, int cols, int rows)
-// {
-//     const int idx = threadIdx.x + blockDim.x * blockIdx.x;
-//     if (idx >= visible_block_count)
-//         return;
-
-//     HashEntry &current = visible_block[idx];
-//     RenderingBlock block;
-//     block.upper_left = make_short2(cols, rows);
-//     block.lower_right = make_short2(0, 0);
-//     block.zrange = make_float2(param.zmax_raycast_, param.zmin_raycast_);
-
-//     for (int corner = 0; corner < 8; ++corner)
-//     {
-//         int3 tmp = current.pos_;
-//         tmp.x += (corner & 1) ? 1 : 0;
-//         tmp.y += (corner & 2) ? 1 : 0;
-//         tmp.z += (corner & 4) ? 1 : 0;
-//     }
-// }
 
 } // namespace map
 } // namespace slam

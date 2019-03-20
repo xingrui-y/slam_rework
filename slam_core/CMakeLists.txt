@@ -26,11 +26,6 @@ target_link_libraries(${PROJECT_NAME}
     slam_util
     slam_cuda
     Eigen3::Eigen
-    # g2o_core
-    # g2o_stuff
-    # g2o_types_sba
-    # g2o_solver_dense
-    # g2o_solver_cholmod
     ${CERES_LIBRARIES}
     ${OpenCV_LIBRARIES}
     ${CUDA_LIBRARIES}

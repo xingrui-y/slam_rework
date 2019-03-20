@@ -5,33 +5,36 @@
 #include <Eigen/Core>
 #include <opencv2/opencv.hpp>
 #include <sophus/se3.hpp>
+#include "rgbd_image.h"
 #include "intrinsic_matrix.h"
 
-class RgbdKeyPointStruct;
-typedef std::shared_ptr<RgbdKeyPointStruct> RgbdKeyPointStructPtr;
+class KeyPointStruct;
+typedef std::shared_ptr<KeyPointStruct> KeyPointStructPtr;
 
 struct Point3d
 {
-  float x, y, z;
+  float x_, y_;         // projection on the image
+  Eigen::Vector3f pos_; // 3d positions
+  cv::Mat descriptor_;  // surf
+  std::map<RgbdFramePtr, int> observations_;
 };
 
-class RgbdKeyPointStruct
+class KeyPointStruct
 {
 public:
-  RgbdKeyPointStruct();
-  void detect(const cv::Mat image, const cv::Mat depth, const IntrinsicMatrix K);
-  void match(RgbdKeyPointStructPtr reference, const Sophus::SE3d pose_curr_to_ref, IntrinsicMatrix K);
-  int count_visible_keypoints(const Sophus::SE3d pose_update, IntrinsicMatrix K) const;
-  void clear_struct();
+  KeyPointStruct();
+
+  cv::Mat compute();
   cv::Mat get_image() const;
-  cv::Mat compute_surf() const;
-  cv::Mat compute_brisk() const;
-  std::vector<Eigen::Vector3f> get_key_points() const;
-  std::vector<cv::KeyPoint> get_cv_keypoints() const;
+  std::vector<cv::KeyPoint> get_key_points_cv() const;
+  std::vector<Point3d> get_key_points_3d() const;
+  void project_and_show(const RgbdFramePtr frame, const Sophus::SE3d pose, const IntrinsicMatrix K);
+  void detect(const RgbdFramePtr frame, const IntrinsicMatrix K);
+  int match(KeyPointStructPtr reference_struct, Sophus::SE3d pose_to_ref, IntrinsicMatrix K);
 
 private:
-  class RgbdKeyPointStructImpl;
-  std::shared_ptr<RgbdKeyPointStructImpl> impl;
+  class KeyPointStructImpl;
+  std::shared_ptr<KeyPointStructImpl> impl;
 };
 
 #endif

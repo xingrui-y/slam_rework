@@ -2,160 +2,124 @@
 #include <opencv2/features2d.hpp>
 #include <opencv2/xfeatures2d.hpp>
 
-#define SEARCH_RADIUS 5
-
-class RgbdKeyPointStruct::RgbdKeyPointStructImpl
+class KeyPointStruct::KeyPointStructImpl
 {
   public:
-    RgbdKeyPointStructImpl();
+    KeyPointStructImpl();
+    cv::Mat compute();
+    void detect(const RgbdFramePtr frame, const IntrinsicMatrix K);
+    void project_and_show(const RgbdFramePtr frame, const Sophus::SE3d pose, const IntrinsicMatrix K);
+    int match(KeyPointStructPtr reference_struct, Sophus::SE3d pose_to_ref, IntrinsicMatrix K);
+    std::vector<cv::KeyPoint> get_key_points_cv() const;
 
-    cv::Mat image;
-    std::vector<Eigen::Vector3f> key_points;
-    std::vector<cv::KeyPoint> cv_keypoints;
-    std::vector<int> correspondence;
+    static cv::Ptr<cv::FastFeatureDetector> fast_detector_;
+    static cv::Ptr<cv::xfeatures2d::SURF> surf_detector_;
 
-    static cv::Ptr<cv::FastFeatureDetector> fast_detector;
-    static cv::Ptr<cv::BRISK> brisk_detector;
-    static cv::Ptr<cv::xfeatures2d::SURF> surf_detector;
+    cv::Mat image_;
+    std::vector<Point3d> key_points_3d_;
+    std::vector<cv::KeyPoint> key_points_cv_;
 };
 
-cv::Ptr<cv::FastFeatureDetector> RgbdKeyPointStruct::RgbdKeyPointStructImpl::fast_detector;
-cv::Ptr<cv::BRISK> RgbdKeyPointStruct::RgbdKeyPointStructImpl::brisk_detector;
-cv::Ptr<cv::xfeatures2d::SURF> RgbdKeyPointStruct::RgbdKeyPointStructImpl::surf_detector;
+cv::Ptr<cv::FastFeatureDetector> KeyPointStruct::KeyPointStructImpl::fast_detector_;
+cv::Ptr<cv::xfeatures2d::SURF> KeyPointStruct::KeyPointStructImpl::surf_detector_;
 
-RgbdKeyPointStruct::RgbdKeyPointStructImpl::RgbdKeyPointStructImpl()
+KeyPointStruct::KeyPointStructImpl::KeyPointStructImpl()
 {
-    if (!fast_detector)
-        fast_detector = cv::FastFeatureDetector::create();
-    if (!brisk_detector)
-        brisk_detector = cv::BRISK::create();
-    if (!surf_detector)
-        surf_detector = cv::xfeatures2d::SURF::create();
+    if (!fast_detector_)
+        fast_detector_ = cv::FastFeatureDetector::create(25);
+    if (!surf_detector_)
+        surf_detector_ = cv::xfeatures2d::SURF::create();
 }
 
-void RgbdKeyPointStruct::detect(const cv::Mat image, const cv::Mat depth, const IntrinsicMatrix K)
+void KeyPointStruct::KeyPointStructImpl::detect(const RgbdFramePtr frame, const IntrinsicMatrix K)
 {
-    impl->image = image.clone();
-    std::vector<cv::KeyPoint> key_points;
-    impl->fast_detector->detect(image, key_points);
+    cv::Mat image = frame->get_image();
+    cv::Mat depth = frame->get_depth();
+    image_ = image.clone();
+    std::vector<cv::KeyPoint> temp_key_points;
+    fast_detector_->detect(image, temp_key_points);
+    int num_keypoints = temp_key_points.size();
 
-    for (int i = 0; i < key_points.size(); ++i)
+    for (int i = 0; i < num_keypoints; ++i)
     {
-        auto &key = key_points[i];
-        int x = (int)(key.pt.x + 0.5f);
-        int y = (int)(key.pt.y + 0.5f);
-        float z = depth.at<float>(y, x);
+        auto &kp = temp_key_points[i];
+        int x = (int)(kp.pt.x + 0.5);
+        int y = (int)(kp.pt.y + 0.5);
+        float z = depth.ptr<float>(y)[x];
+
         if (z == z)
         {
-            Eigen::Vector3f point;
-            point(2) = z;
-            point(0) = K.invfx * (key.pt.x - K.cx) * z;
-            point(1) = K.invfy * (key.pt.y - K.cy) * z;
-            impl->key_points.push_back(point);
-            impl->cv_keypoints.push_back(key);
+            Point3d pt3d;
+            pt3d.x_ = kp.pt.x;
+            pt3d.y_ = kp.pt.y;
+            pt3d.pos_ = Eigen::Vector3f(z * (x - K.cx) * K.invfy, z * (y - K.cy) * K.invfy, z);
+            key_points_3d_.push_back(pt3d);
         }
     }
 }
 
-void RgbdKeyPointStruct::clear_struct()
+void KeyPointStruct::KeyPointStructImpl::project_and_show(const RgbdFramePtr frame, const Sophus::SE3d keyframe_pose, const IntrinsicMatrix K)
 {
-    impl->key_points.clear();
-    impl->cv_keypoints.clear();
-    impl->correspondence.clear();
-}
-
-cv::Mat RgbdKeyPointStruct::get_image() const
-{
-    return impl->image;
-}
-
-cv::Mat RgbdKeyPointStruct::compute_surf() const
-{
-    cv::Mat desc;
-    impl->surf_detector->compute(impl->image, impl->cv_keypoints, desc);
-    return desc;
-}
-
-cv::Mat RgbdKeyPointStruct::compute_brisk() const
-{
-    cv::Mat desc;
-    impl->brisk_detector->compute(impl->image, impl->cv_keypoints, desc);
-    return desc;
-}
-
-std::vector<cv::KeyPoint> RgbdKeyPointStruct::get_cv_keypoints() const
-{
-    return impl->cv_keypoints;
-}
-
-std::vector<Eigen::Vector3f> RgbdKeyPointStruct::get_key_points() const
-{
-    return impl->key_points;
-}
-
-int compute_match_score(const cv::Mat ref, const cv::Mat curr)
-{
-    int score = 0;
-    for (int y = 0; y < ref.rows; ++y)
+    cv::Mat image = frame->get_image();
+    Sophus::SE3d pose_from_ref = frame->get_pose().inverse() * keyframe_pose;
+    std::vector<cv::KeyPoint> frame_keypoints;
+    for (int i = 0; i < key_points_3d_.size(); ++i)
     {
-        for (int x = 0; x < ref.cols; ++x)
-        {
-            score += ref.ptr<uchar>(y, x) - curr.ptr<uchar>(y, x);
-        }
-    }
-    return score;
-}
-
-int RgbdKeyPointStruct::count_visible_keypoints(const Sophus::SE3d pose_update, IntrinsicMatrix K) const
-{
-    int count = 0;
-    for (auto key : impl->key_points)
-    {
-        key = pose_update.cast<float>() * key;
-        float x = K.fx * key(0) / key(2) + K.cx;
-        float y = K.fy * key(1) / key(2) + K.cy;
+        auto kp = key_points_3d_[i];
+        auto pos = pose_from_ref.cast<float>() * kp.pos_;
+        float x = K.fx * pos(0) / pos(2) + K.cx;
+        float y = K.fy * pos(1) / pos(2) + K.cy;
         if (x < 0 || y < 0 || x > K.width - 1 || y > K.height - 1)
             continue;
 
-        count++;
+        cv::KeyPoint pt;
+        pt.pt.x = x;
+        pt.pt.y = y;
+        frame_keypoints.push_back(pt);
     }
-    return count;
+
+    cv::Mat outImg;
+    cv::drawKeypoints(image, frame_keypoints, outImg, cv::Scalar(0, 255, 0));
+    cv::imshow("outImg", outImg);
+    cv::waitKey(1);
 }
 
-void RgbdKeyPointStruct::match(RgbdKeyPointStructPtr ref, const Sophus::SE3d pose_curr_to_ref, IntrinsicMatrix K)
+std::vector<cv::KeyPoint> KeyPointStruct::KeyPointStructImpl::get_key_points_cv() const
 {
-    cv::Mat desc_ref = ref->compute_surf();
-    cv::Mat desc_curr = this->compute_surf();
-    std::vector<cv::KeyPoint> ref_cv_keypoints = ref->get_cv_keypoints();
-    std::vector<Eigen::Vector3f> ref_keypoints = ref->get_key_points();
-    int num_ref_keypoints = ref_cv_keypoints.size();
-    std::vector<int> corresp_vec(impl->cv_keypoints.size());
-    std::vector<cv::DMatch> match_list;
+    std::vector<cv::KeyPoint> key_points;
+    std::transform(key_points_3d_.begin(), key_points_3d_.end(), std::back_inserter(key_points), [](Point3d pt) -> cv::KeyPoint {cv::KeyPoint kp; kp.pt.x = pt.x_; kp.pt.y = pt.y_; return kp; });
+    return key_points;
+}
 
-    for (int i = 0; i < impl->cv_keypoints.size(); ++i)
+int KeyPointStruct::KeyPointStructImpl::match(KeyPointStructPtr reference_struct, Sophus::SE3d pose_to_ref, IntrinsicMatrix K)
+{
+    cv::Mat desc_ref = reference_struct->compute();
+    cv::Mat desc_curr = this->compute();
+    auto kp_ref = reference_struct->get_key_points_3d();
+    std::vector<cv::DMatch> match_list;
+    for (int i = 0; i < key_points_3d_.size(); ++i)
     {
-        Eigen::Vector3f key = impl->key_points[i];
-        key = pose_curr_to_ref.cast<float>() * key;
-        float x = K.fx * key(0) / key(2) + K.cx;
-        float y = K.fy * key(1) / key(2) + K.cy;
+        Eigen::Vector3f pt = pose_to_ref.cast<float>() * key_points_3d_[i].pos_;
+        float x = K.fx * pt(0) / pt(2) + K.cx;
+        float y = K.fy * pt(1) / pt(2) + K.cy;
         if (x < 0 || y < 0 || x > K.width - 1 || y > K.height - 1)
             continue;
 
         int u = (int)(x + 0.5);
         int v = (int)(y + 0.5);
-        int x0 = std::max(0, u - SEARCH_RADIUS);
-        int x1 = std::min((int)(K.width - 1), u + SEARCH_RADIUS);
-        int y0 = std::max(0, v - SEARCH_RADIUS);
-        int y1 = std::min((int)(K.height - 1), v + SEARCH_RADIUS);
+        int x0 = std::max(0, u - 5);
+        int x1 = std::min((int)(K.width - 1), u + 5);
+        int y0 = std::max(0, v - 5);
+        int y1 = std::min((int)(K.height - 1), v + 5);
 
         cv::Mat desc_i = desc_curr.row(i);
-        double min_score = 64;
+        double min_score = std::numeric_limits<double>::max();
         int best_match = -1;
-        for (int j = 0; j < num_ref_keypoints; ++j)
+        for (int j = 0; j < kp_ref.size(); ++j)
         {
-            cv::KeyPoint &key_j = ref_cv_keypoints[j];
-            Eigen::Vector3f &key_eigen = ref_keypoints[j];
-            if (key_j.pt.x < x0 || key_j.pt.x > x1 || key_j.pt.y < y0 || key_j.pt.y > y1 || (key - key_eigen).norm() > 0.1)
+            float ref_x = kp_ref[j].x_;
+            float ref_y = kp_ref[j].y_;
+            if (ref_x < x0 || ref_x > x1 || ref_y < y0 || ref_y > y1)
                 continue;
 
             cv::Mat desc_j = desc_ref.row(j);
@@ -167,7 +131,6 @@ void RgbdKeyPointStruct::match(RgbdKeyPointStructPtr ref, const Sophus::SE3d pos
             }
         }
 
-        corresp_vec[i] = best_match;
         cv::DMatch match;
         match.queryIdx = i;
         match.trainIdx = best_match;
@@ -176,16 +139,61 @@ void RgbdKeyPointStruct::match(RgbdKeyPointStructPtr ref, const Sophus::SE3d pos
             match_list.push_back(match);
     }
 
-    cv::Mat curr_image = this->get_image();
-    auto curr_cv_keypoints = this->get_cv_keypoints();
-    cv::Mat ref_image = ref->get_image();
+    cv::Mat ref_image = reference_struct->get_image();
+    auto curr_cv_keypoints = this->get_key_points_cv();
+    auto ref_cv_keypoints = reference_struct->get_key_points_cv();
     cv::Mat outImg;
-    cv::drawMatches(curr_image, curr_cv_keypoints, ref_image, ref_cv_keypoints, match_list, outImg);
+    cv::drawMatches(image_, curr_cv_keypoints, ref_image, ref_cv_keypoints, match_list, outImg);
 
     cv::imshow("outImg", outImg);
     cv::waitKey(1);
+
+    return match_list.size();
 }
 
-RgbdKeyPointStruct::RgbdKeyPointStruct() : impl(new RgbdKeyPointStructImpl())
+cv::Mat KeyPointStruct::KeyPointStructImpl::compute()
 {
+    cv::Mat desc;
+    auto key_points = this->get_key_points_cv();
+    surf_detector_->compute(image_, key_points, desc);
+    return desc;
+}
+
+KeyPointStruct::KeyPointStruct() : impl(new KeyPointStructImpl())
+{
+}
+
+void KeyPointStruct::detect(const RgbdFramePtr frame, const IntrinsicMatrix K)
+{
+    impl->detect(frame, K);
+}
+
+int KeyPointStruct::match(KeyPointStructPtr reference_struct, Sophus::SE3d pose_to_ref, IntrinsicMatrix K)
+{
+    return impl->match(reference_struct, pose_to_ref, K);
+}
+
+void KeyPointStruct::project_and_show(const RgbdFramePtr frame, const Sophus::SE3d pose, const IntrinsicMatrix K)
+{
+    impl->project_and_show(frame, pose, K);
+}
+
+cv::Mat KeyPointStruct::compute()
+{
+    return impl->compute();
+}
+
+std::vector<cv::KeyPoint> KeyPointStruct::get_key_points_cv() const
+{
+    return impl->get_key_points_cv();
+}
+
+std::vector<Point3d> KeyPointStruct::get_key_points_3d() const
+{
+    return impl->key_points_3d_;
+}
+
+cv::Mat KeyPointStruct::get_image() const
+{
+    return impl->image_;
 }

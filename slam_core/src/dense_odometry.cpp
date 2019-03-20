@@ -7,140 +7,127 @@ class DenseOdometry::DenseOdometryImpl
 {
 public:
   DenseOdometryImpl(const IntrinsicMatrixPyramidPtr intrinsics_pyr);
-  void track(const cv::Mat &image, const cv::Mat &depth_float, const ulong &id, const double &time_stamp);
-  bool need_new_keyframe() const;
-  void create_new_keyframe();
+  void track_frame(RgbdFramePtr current_frame);
+  bool keyframe_needed() const;
+  void create_keyframe();
 
-  RgbdFramePtr current_frame_;
   RgbdFramePtr current_keyframe_;
   RgbdFramePtr last_frame_;
-  RgbdImagePtr current_;
-  RgbdImagePtr reference_;
+
+  RgbdImagePtr current_image_;
+  RgbdImagePtr reference_image_;
+
   IntrinsicMatrixPyramidPtr intrinsics_pyr_;
   std::unique_ptr<DenseTracking> tracker_;
 
-  // KeyPoint detection
-  std::vector<RgbdKeyPointStructPtr> key_point_chain_;
-  RgbdKeyPointStructPtr current_point_struct_;
+  bool keyframe_needed_;
+  bool tracking_lost_;
 
-  // Public interface
-  Sophus::SE3d initial_pose_;
-  std::vector<Sophus::SE3d> camera_trajectory_;
+  TrackingResult result_;
+  TrackingContext context_;
 };
 
 DenseOdometry::DenseOdometryImpl::DenseOdometryImpl(const IntrinsicMatrixPyramidPtr intrinsics_pyr)
-    : intrinsics_pyr_(intrinsics_pyr), tracker_(new DenseTracking()), current_(new RgbdImage()), reference_(new RgbdImage()),
-      current_frame_(nullptr), current_keyframe_(nullptr), last_frame_(nullptr), current_point_struct_(new RgbdKeyPointStruct())
+    : intrinsics_pyr_(intrinsics_pyr), tracker_(new DenseTracking()), current_image_(new RgbdImage()),
+      reference_image_(new RgbdImage()), current_keyframe_(nullptr), last_frame_(nullptr),
+      keyframe_needed_(false), tracking_lost_(false)
 {
 }
 
-bool DenseOdometry::DenseOdometryImpl::need_new_keyframe() const
+bool DenseOdometry::DenseOdometryImpl::keyframe_needed() const
 {
-  IntrinsicMatrix K = intrinsics_pyr_->get_intrinsic_matrix_at(0);
-  int visible_kp_count = current_point_struct_->count_visible_keypoints(current_frame_->get_pose().inverse() * current_keyframe_->get_pose(), K);
-  return visible_kp_count < 800;
+  return false;
 }
 
-void DenseOdometry::DenseOdometryImpl::create_new_keyframe()
+void DenseOdometry::DenseOdometryImpl::create_keyframe()
 {
-  current_keyframe_ = current_frame_;
-  cv::Mat image = current_frame_->get_image();
-  cv::Mat depth = current_frame_->get_depth();
-  current_point_struct_ = std::make_shared<RgbdKeyPointStruct>();
-  current_point_struct_->detect(image, depth, intrinsics_pyr_->get_intrinsic_matrix_at(0));
+  keyframe_needed_ = false;
+  current_keyframe_ = last_frame_;
 }
 
-void DenseOdometry::DenseOdometryImpl::track(const cv::Mat &image, const cv::Mat &depth_float, const ulong &id, const double &time_stamp)
+void DenseOdometry::DenseOdometryImpl::track_frame(RgbdFramePtr current_frame)
 {
-  current_frame_ = std::make_shared<RgbdFrame>(image, depth_float, id, time_stamp);
-  current_->upload(current_frame_, intrinsics_pyr_);
+  current_image_->upload(current_frame, intrinsics_pyr_);
 
-  if (current_keyframe_ == nullptr)
+  if (current_keyframe_ != nullptr)
   {
-    current_frame_->set_pose(initial_pose_);
-    current_keyframe_ = last_frame_ = current_frame_;
-    current_.swap(reference_);
+    context_.use_initial_guess_ = true;
+    context_.initial_estimate_ = Sophus::SE3d();
+    context_.intrinsics_pyr_ = intrinsics_pyr_;
+    context_.max_iterations_ = {10, 5, 3, 3, 3};
 
-    current_point_struct_->detect(image, depth_float, intrinsics_pyr_->get_intrinsic_matrix_at(0));
-
-    return;
-  }
-
-  TrackingContext c;
-  c.use_initial_guess_ = true;
-  c.initial_estimate_ = Sophus::SE3d();
-  c.intrinsics_pyr_ = intrinsics_pyr_;
-  c.max_iterations_ = {10, 5, 3, 3, 3};
-  TrackingResult result = tracker_->compute_transform(reference_, current_, c);
-
-  if (result.sucess)
-  {
-    Sophus::SE3d current_pose = last_frame_->get_pose() * result.update;
-    current_frame_->set_pose(current_pose);
-    camera_trajectory_.push_back(current_pose);
-    current_.swap(reference_);
-    last_frame_ = current_frame_;
-
-    auto key_points = current_point_struct_->get_key_points();
-    IntrinsicMatrix K = intrinsics_pyr_->get_intrinsic_matrix_at(0);
-
-    /** use surf to search key point correspondences */
-    // RgbdKeyPointStructPtr current_ref(new RgbdKeyPointStruct());
-    // current_ref->detect(image, depth_float, K);
-    // current_ref->match(current_point_struct_, current_keyframe_->get_pose().inverse() * current_frame_->get_pose(), K);
-    // std::cout << "visible: " << current_point_struct_->count_visible_keypoints(current_pose.inverse() * current_keyframe_->get_pose(), K) << std::endl;
-
-    if (need_new_keyframe())
-      create_new_keyframe();
-
-    std::vector<cv::KeyPoint> kp_list;
-    Sophus::SE3f T = current_pose.cast<float>().inverse() * current_keyframe_->get_pose().cast<float>();
-    for (auto key : key_points)
-    {
-      Eigen::Vector3f revec = T * key;
-      float x = K.fx * revec(0) / revec(2) + K.cx;
-      float y = K.fy * revec(1) / revec(2) + K.cy;
-      cv::KeyPoint kp;
-      kp.pt.x = x;
-      kp.pt.y = y;
-      kp_list.push_back(kp);
-    }
-
-    cv::drawKeypoints(image, kp_list, image);
-    cv::cvtColor(image, image, cv::COLOR_RGB2BGR);
-    cv::imshow("iamge", image);
-    cv::waitKey(1);
+    result_ = tracker_->compute_transform(reference_image_, current_image_, context_);
   }
   else
   {
+    last_frame_ = current_frame;
+    keyframe_needed_ = true;
+    current_image_.swap(reference_image_);
+    return;
+  }
+
+  if (result_.sucess)
+  {
+    auto pose = last_frame_->get_pose() * result_.update;
+    current_frame->set_pose(pose);
+
+    last_frame_ = current_frame;
+    current_image_.swap(reference_image_);
+  }
+  else
+  {
+    tracking_lost_ = true;
   }
 }
 
-DenseOdometry::DenseOdometry(const IntrinsicMatrixPyramidPtr intrinsics_pyr) : impl(new DenseOdometryImpl(intrinsics_pyr))
+DenseOdometry::DenseOdometry(const IntrinsicMatrixPyramidPtr intrinsics_pyr)
+    : impl(new DenseOdometryImpl(intrinsics_pyr))
 {
 }
 
-void DenseOdometry::track(const cv::Mat &image, const cv::Mat &depth_float, const ulong &id, const double &time_stamp)
+void DenseOdometry::track_frame(RgbdFramePtr current_frame)
 {
-  impl->track(image, depth_float, id, time_stamp);
+  impl->track_frame(current_frame);
 }
 
 RgbdImagePtr DenseOdometry::get_current_image() const
 {
-  return impl->current_;
+  return impl->current_image_;
 }
 
 RgbdImagePtr DenseOdometry::get_reference_image() const
 {
-  return impl->reference_;
+  return impl->reference_image_;
 }
 
-std::vector<Sophus::SE3d> DenseOdometry::get_camera_trajectory() const
+RgbdFramePtr DenseOdometry::get_current_keyframe() const
 {
-  return impl->camera_trajectory_;
+  return impl->current_keyframe_;
 }
 
-void DenseOdometry::set_initial_pose(const Sophus::SE3d pose)
+bool DenseOdometry::keyframe_needed() const
 {
-  impl->initial_pose_ = pose;
+  return impl->keyframe_needed_;
 }
+
+bool DenseOdometry::is_tracking_lost() const
+{
+  return impl->tracking_lost_;
+}
+
+void DenseOdometry::create_keyframe()
+{
+  impl->create_keyframe();
+}
+
+// std::vector<Sophus::SE3d> DenseOdometry::get_camera_trajectory() const
+// {
+//   return impl->camera_trajectory_;
+// }
+
+// std::vector<Sophus::SE3d> DenseOdometry::get_keyframe_poses() const
+// {
+//   std::vector<Sophus::SE3d> list_all_keyframe_poses;
+//   std::transform(impl->keyframe_list_.begin(), impl->keyframe_list_.end(), std::back_inserter(list_all_keyframe_poses), [](const RgbdFramePtr frame) -> Sophus::SE3d { return frame->get_pose(); });
+//   return list_all_keyframe_poses;
+// }

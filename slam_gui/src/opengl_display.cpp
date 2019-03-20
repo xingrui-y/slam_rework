@@ -41,7 +41,8 @@ class GlDisplay::GlDisplayImpl
     void switch_mesh_buffer();
 
     void draw_frame();
-    void draw_camera();
+    void draw_camera(const Sophus::SE3d pose) const;
+    void draw_keyframe_graph() const;
     void draw_camera_trajectory() const;
     void draw_ground_truth_trajectory() const;
     void draw_mesh_shaded(pangolin::GlSlProgram *program);
@@ -56,6 +57,8 @@ class GlDisplay::GlDisplayImpl
     pangolin::Var<bool> *btn_show_ground_truth;
     pangolin::Var<bool> *btn_show_camera_trajectory;
     pangolin::Var<bool> *btn_show_shaded_mesh;
+    pangolin::Var<bool> *btn_show_current_camera;
+    pangolin::Var<bool> *btn_show_keyframe_graph;
 
     //GLSL shaders
     pangolin::GlSlProgram phong_shader;
@@ -63,6 +66,7 @@ class GlDisplay::GlDisplayImpl
     Sophus::SE3d current_pose;
     std::vector<Sophus::SE3d> ground_truth;
     std::vector<Sophus::SE3d> camera_trajectory;
+    std::vector<Sophus::SE3d> keyframe_poses;
 
     std::shared_ptr<MeshBuffer> buffer[2];
     std::mutex mutex_buffer_;
@@ -94,8 +98,9 @@ GlDisplay::GlDisplayImpl::GlDisplayImpl(int width, int height)
     btn_follow_camera = new pangolin::Var<bool>("MainUI.Follow Camera", false, true);
     btn_show_ground_truth = new pangolin::Var<bool>("MainUI.Show Ground Truth", true, true);
     btn_show_camera_trajectory = new pangolin::Var<bool>("MainUI.Show Camera Trajectory", true, true);
-
     btn_show_shaded_mesh = new pangolin::Var<bool>("MainUI.Show Mesh Phong", true, true);
+    btn_show_current_camera = new pangolin::Var<bool>("MainUI.Show Camera", false, true);
+    btn_show_keyframe_graph = new pangolin::Var<bool>("MainUI.Show Key Frame Graph", false, true);
 }
 
 void GlDisplay::GlDisplayImpl::switch_mesh_buffer()
@@ -137,8 +142,32 @@ void GlDisplay::GlDisplayImpl::draw_mesh_shaded(pangolin::GlSlProgram *program)
     }
 }
 
-void GlDisplay::GlDisplayImpl::draw_camera()
+std::vector<GLfloat> get_camera_wireframe_coord(const Sophus::SE3d pose)
 {
+    std::vector<GLfloat> transformed_wireframe;
+    std::vector<Eigen::Vector3f> wire_frame = {{1, 1, 1}, {1, -1, 1}, {0, 0, 0}, {1, -1, 1}, {-1, -1, 1}, {0, 0, 0}, {-1, -1, 1}, {-1, 1, 1}, {0, 0, 0}, {-1, 1, 1}, {1, 1, 1}, {0, 0, 0}};
+
+    for (auto vertex : wire_frame)
+    {
+        vertex(1) *= 1.5;
+        vertex *= 0.01f;
+        vertex = pose.cast<float>() * vertex;
+        transformed_wireframe.push_back(vertex(0));
+        transformed_wireframe.push_back(vertex(1));
+        transformed_wireframe.push_back(vertex(2));
+    }
+
+    return transformed_wireframe;
+}
+
+void GlDisplay::GlDisplayImpl::draw_camera(const Sophus::SE3d pose) const
+{
+    auto cam = get_camera_wireframe_coord(pose);
+
+    glColor3f(0.0, 1.0, 0.0);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    pangolin::glDrawVertices(cam.size() / 3, (GLfloat *)&cam[0], GL_TRIANGLES, 3);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 }
 
 void GlDisplay::GlDisplayImpl::draw_frame()
@@ -159,7 +188,12 @@ void GlDisplay::GlDisplayImpl::draw_frame()
     if (*btn_show_shaded_mesh)
         draw_mesh_shaded(&phong_shader);
 
-    draw_camera();
+    if (*btn_show_keyframe_graph)
+        draw_keyframe_graph();
+
+    if (*btn_show_current_camera)
+        draw_camera(current_pose);
+
     pangolin::FinishFrame();
 }
 
@@ -195,6 +229,14 @@ void GlDisplay::GlDisplayImpl::draw_camera_trajectory() const
     pangolin::glDrawVertices(camera.size() / 3, (GLfloat *)&camera[0], GL_LINE_STRIP, 3);
 }
 
+void GlDisplay::GlDisplayImpl::draw_keyframe_graph() const
+{
+    for (auto pose : keyframe_poses)
+    {
+        draw_camera(pose);
+    }
+}
+
 void GlDisplay::GlDisplayImpl::set_model_view_matrix(const Sophus::SE3d &pose)
 {
     Eigen::Vector3d up = {0, -1, 0}, eye = {0, 0, 0}, look = {0, 0, 1};
@@ -218,6 +260,18 @@ bool GlDisplay::GlDisplayImpl::should_quit() const
 
 GlDisplay::GlDisplay() : GlDisplay(1280, 960)
 {
+}
+
+GlDisplay::~GlDisplay()
+{
+    delete impl->btn_system_reset;
+    delete impl->btn_system_reboot;
+    delete impl->btn_follow_camera;
+    delete impl->btn_show_ground_truth;
+    delete impl->btn_show_camera_trajectory;
+    delete impl->btn_show_shaded_mesh;
+    delete impl->btn_show_current_camera;
+    delete impl->btn_show_keyframe_graph;
 }
 
 GlDisplay::GlDisplay(int width, int height) : impl(new GlDisplayImpl(width, height))
@@ -247,6 +301,11 @@ void GlDisplay::set_ground_truth_trajectory(const std::vector<Sophus::SE3d> &gt)
 void GlDisplay::set_camera_trajectory(const std::vector<Sophus::SE3d> camera)
 {
     impl->camera_trajectory = camera;
+}
+
+void GlDisplay::set_keyframe_poses(const std::vector<Sophus::SE3d> keyframes)
+{
+    impl->keyframe_poses = keyframes;
 }
 
 void GlDisplay::upload_mesh(const void *vertices, const void *normal, const void *texture, const size_t &size)

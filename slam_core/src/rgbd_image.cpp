@@ -13,11 +13,13 @@ class RgbdImage::RgbdImageImpl
     void render_synthetic_view();
 
     RgbdFramePtr reference_frame_;
+
     cv::cuda::GpuMat image_;
     cv::cuda::GpuMat rendered_image_;
     cv::cuda::GpuMat image_float_;
     cv::cuda::GpuMat depth_float_;
     cv::cuda::GpuMat intensity_float_;
+
     std::vector<cv::cuda::GpuMat> depth_;
     std::vector<cv::cuda::GpuMat> intensity_;
     std::vector<cv::cuda::GpuMat> intensity_dx_;
