@@ -7,6 +7,8 @@ PRIVATE
     src/stop_watch.cpp
     src/intrinsic_matrix.cpp
     src/message_logger.cpp
+    src/simple_config_file_loader.cpp
+    src/opencv_recorder.cpp
 )
 
 target_include_directories(${PROJECT_NAME}

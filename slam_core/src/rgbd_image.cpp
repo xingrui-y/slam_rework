@@ -163,6 +163,7 @@ class RgbdFrame::RgbdFrameImpl
     unsigned long id_;
     double time_stamp_;
     Sophus::SE3d pose_;
+    RgbdFramePtr reference_frame_;
     IntrinsicMatrixPyramidPtr intrinsics_pyr_;
 };
 
@@ -193,4 +194,14 @@ Sophus::SE3d RgbdFrame::get_pose() const
 void RgbdFrame::set_pose(const Sophus::SE3d &pose)
 {
     impl->pose_ = pose;
+}
+
+RgbdFramePtr RgbdFrame::get_reference_frame() const
+{
+    return impl->reference_frame_;
+}
+
+void RgbdFrame::set_reference_frame(RgbdFramePtr reference)
+{
+    impl->reference_frame_ = reference;
 }

@@ -305,8 +305,6 @@ void create_rendering_blocks(MapStruct map_struct,
     dim3 block = dim3(div_up(visible_block_count, thread.x));
 
     create_rendering_blocks_kernel<<<block, thread>>>(delegate);
-    safe_call(cudaGetLastError());
-    safe_call(cudaDeviceSynchronize());
 
     uint rendering_block_count;
     map_struct.get_rendering_block_count(rendering_block_count);
@@ -317,8 +315,6 @@ void create_rendering_blocks(MapStruct map_struct,
     block = dim3((uint)ceil((float)rendering_block_count / 4), 4);
 
     split_and_fill_rendering_blocks_kernel<<<block, thread>>>(delegate);
-    safe_call(cudaGetLastError());
-    safe_call(cudaDeviceSynchronize());
 }
 
 struct MapRenderingDelegate

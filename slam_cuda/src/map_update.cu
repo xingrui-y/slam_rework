@@ -40,9 +40,8 @@ __device__ bool is_block_visible(const int3 &block_pos,
     return false;
 }
 
-__global__ void check_visibility_flag_kernel(MapStruct map_struct, uchar *flag,
-                                             DeviceMatrix3x4 inv_pose, int cols, int rows,
-                                             float fx, float fy, float cx, float cy)
+__global__ void check_visibility_flag_kernel(MapStruct map_struct, uchar *flag, DeviceMatrix3x4 inv_pose,
+                                             int cols, int rows, float fx, float fy, float cx, float cy)
 {
     const int idx = threadIdx.x + blockDim.x * blockIdx.x;
     if (idx >= param.num_total_hash_entries_)
@@ -56,12 +55,15 @@ __global__ void check_visibility_flag_kernel(MapStruct map_struct, uchar *flag,
         default:
         {
             if (is_block_visible(current.pos_, inv_pose, cols, rows, fx, fy, cx, cy))
+            {
                 flag[idx] = 1;
+            }
             else
             {
                 map_struct.delete_block(current);
                 flag[idx] = 0;
             }
+
             return;
         }
         case 2:

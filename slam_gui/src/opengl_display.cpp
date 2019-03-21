@@ -149,7 +149,7 @@ std::vector<GLfloat> get_camera_wireframe_coord(const Sophus::SE3d pose)
 
     for (auto vertex : wire_frame)
     {
-        vertex(1) *= 1.5;
+        vertex(1) *= 0.75;
         vertex *= 0.01f;
         vertex = pose.cast<float>() * vertex;
         transformed_wireframe.push_back(vertex(0));

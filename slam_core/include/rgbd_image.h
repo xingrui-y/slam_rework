@@ -49,6 +49,8 @@ public:
   cv::Mat get_depth() const;
   Sophus::SE3d get_pose() const;
   void set_pose(const Sophus::SE3d &pose);
+  RgbdFramePtr get_reference_frame() const;
+  void set_reference_frame(RgbdFramePtr reference);
 
 private:
   class RgbdFrameImpl;

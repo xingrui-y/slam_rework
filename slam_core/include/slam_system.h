@@ -16,11 +16,14 @@ public:
 
   RgbdImagePtr get_current_image() const;
   RgbdImagePtr get_reference_image() const;
-  void set_initial_pose(const Sophus::SE3d pose);
   Sophus::SE3d get_current_pose() const;
-  void finish_pending_works();
   std::vector<Sophus::SE3d> get_keyframe_poses() const;
   std::vector<Sophus::SE3d> get_camera_trajectory() const;
+
+  void finish_pending_works();
+  void restart_system(); // TODO
+  void force_keyframe(); // TODO
+  void set_initial_pose(const Sophus::SE3d pose);
 
 private:
   class SlamSystemImpl;

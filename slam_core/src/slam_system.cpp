@@ -5,6 +5,7 @@
 #include "bundle_adjuster.h"
 #include "point_struct.h"
 #include "stop_watch.h"
+#include "opencv_recorder.h"
 #include <memory>
 
 class SlamSystem::SlamSystemImpl
@@ -16,7 +17,7 @@ public:
   SlamSystemImpl(const IntrinsicMatrixPyramidPtr &intrinsic_pyr);
   void update(const cv::Mat &image, const cv::Mat &depth_float, const ulong &id, const double &time_stamp);
 
-  double compute_distance_score() const;
+  bool compute_distance_score() const;
   bool keyframe_needed() const;
   void create_keyframe();
 
@@ -27,27 +28,36 @@ public:
 
   RgbdFramePtr current_frame_;
   RgbdFramePtr current_keyframe_;
+  RgbdFramePtr last_keyframe_;
   Sophus::SE3d initial_pose_;
   std::vector<Sophus::SE3d> frame_poses_;
   std::vector<RgbdFramePtr> keyframes_;
 
   KeyPointStructPtr reference_point_struct_;
   KeyPointStructPtr current_point_struct_;
+  bool system_initialised_;
 };
 
 SlamSystem::SlamSystemImpl::SlamSystemImpl(const IntrinsicMatrixPyramidPtr &intrinsics_pyr)
-    : intrinsics_pyr_(intrinsics_pyr), odometry_(new DenseOdometry(intrinsics_pyr)),
-      bundler_(new BundleAdjuster()), mapping_(new DenseMapping(intrinsics_pyr)),
-      reference_point_struct_(new KeyPointStruct()), current_point_struct_(new KeyPointStruct())
+    : intrinsics_pyr_(intrinsics_pyr), odometry_(new DenseOdometry(intrinsics_pyr)), bundler_(new BundleAdjuster()),
+      mapping_(new DenseMapping(intrinsics_pyr)), reference_point_struct_(new KeyPointStruct()),
+      current_point_struct_(new KeyPointStruct()), system_initialised_(false), current_keyframe_(nullptr)
 {
 }
 
-double SlamSystem::SlamSystemImpl::compute_distance_score() const
+bool SlamSystem::SlamSystemImpl::compute_distance_score() const
 {
-  auto z_keyframe = current_keyframe_->get_pose().rotationMatrix().rightCols<1>();
-  auto z_frame = current_frame_->get_pose().rotationMatrix().rightCols<1>();
+  Eigen::Vector3d z_keyframe = current_keyframe_->get_pose().rotationMatrix().topRightCorner(3, 1);
+  Eigen::Vector3d z_frame = current_frame_->get_pose().rotationMatrix().topRightCorner(3, 1);
+  Eigen::Vector3d dist_keyframe = current_keyframe_->get_pose().translation();
+  Eigen::Vector3d dist_frame = current_frame_->get_pose().translation();
   double angle_diff = z_keyframe.dot(z_frame);
-  return 0;
+  double dist_diff = (dist_frame - dist_keyframe).norm();
+
+  if (angle_diff < 0.8 || dist_diff > 0.2)
+    return true;
+
+  return false;
 }
 
 bool SlamSystem::SlamSystemImpl::keyframe_needed() const
@@ -64,41 +74,73 @@ bool SlamSystem::SlamSystemImpl::keyframe_needed() const
 void SlamSystem::SlamSystemImpl::create_keyframe()
 {
   odometry_->create_keyframe();
+  last_keyframe_ = current_keyframe_;
   current_keyframe_ = odometry_->get_current_keyframe();
+  keyframes_.push_back(current_keyframe_);
+  KeyPointStructPtr tmp_point_struct = reference_point_struct_;
+  reference_point_struct_ = std::make_shared<KeyPointStruct>();
   reference_point_struct_->detect(current_keyframe_, intrinsics_pyr_->get_intrinsic_matrix_at(0));
-}
 
+  if (last_keyframe_ != nullptr)
+  {
+    // const Sophus::SE3d pose_to_ref = last_keyframe_->get_pose().inverse() * current_keyframe_->get_pose();
+    // reference_point_struct_->match(tmp_point_struct, pose_to_ref, intrinsics_pyr_->get_intrinsic_matrix_at(0));
+  }
+}
+slam::util::CVRecorder video(1280, 960, 10);
 void SlamSystem::SlamSystemImpl::update(const cv::Mat &image, const cv::Mat &depth_float, const ulong &id, const double &time_stamp)
 {
   current_frame_ = std::make_shared<RgbdFrame>(image, depth_float, id, time_stamp);
 
-  if (id == 0)
+  if (!system_initialised_)
+  {
     current_frame_->set_pose(initial_pose_);
+    system_initialised_ = true;
+  }
 
   odometry_->track_frame(current_frame_);
 
   if (!odometry_->is_tracking_lost())
   {
-    RgbdImagePtr image = odometry_->get_reference_image();
+    RgbdImagePtr reference_image = odometry_->get_reference_image();
 
-    mapping_->update(image);
-    mapping_->raycast(image);
-    image->resize_device_map();
+    mapping_->update(reference_image);
+    mapping_->raycast(reference_image);
+    reference_image->resize_device_map();
 
-    cv::cuda::GpuMat vmap = image->get_vmap();
-    cv::cuda::GpuMat nmap = image->get_nmap();
-    cv::cuda::GpuMat rendered_image = image->get_rendered_image();
-
+    cv::cuda::GpuMat vmap = reference_image->get_vmap();
+    cv::cuda::GpuMat nmap = reference_image->get_nmap();
+    cv::cuda::GpuMat rendered_image = reference_image->get_rendered_image();
     cv::Mat img(rendered_image);
     cv::imshow("rendered image", img);
     cv::waitKey(1);
 
-    if (current_keyframe_)
+    if (current_keyframe_ != nullptr)
     {
-      reference_point_struct_->project_and_show(current_frame_, current_keyframe_->get_pose(), intrinsics_pyr_->get_intrinsic_matrix_at(0));
-      // auto pose_to_ref = current_keyframe_->get_pose().inverse() * current_frame_->get_pose();
-      // current_point_struct_->detect(current_frame_, intrinsics_pyr_->get_intrinsic_matrix_at(0));
-      // current_point_struct_->match(reference_point_struct_, pose_to_ref, intrinsics_pyr_->get_intrinsic_matrix_at(0));
+      cv::Mat out_image, out_image2;
+      IntrinsicMatrix K_0 = intrinsics_pyr_->get_intrinsic_matrix_at(0);
+      current_point_struct_ = std::make_shared<KeyPointStruct>();
+      current_point_struct_->detect(current_frame_, K_0);
+      reference_point_struct_->project_and_show(current_point_struct_, K_0, out_image2);
+      auto pose_to_ref = current_keyframe_->get_pose().inverse() * current_frame_->get_pose();
+      current_point_struct_->detect(current_frame_, K_0);
+      current_point_struct_->match(reference_point_struct_, pose_to_ref, K_0, out_image);
+
+      // cv::Mat temp(960, 1280, CV_8UC3);
+      // cv::Mat rendered_image0(480, 640, CV_8UC3);
+      // cv::cvtColor(out_image, out_image, cv::COLOR_RGB2BGR);
+      // cv::cvtColor(out_image2, out_image2, cv::COLOR_RGB2BGR);
+      // cv::cvtColor(img, rendered_image0, cv::COLOR_RGBA2BGR);
+
+      // out_image.copyTo(temp(cv::Rect2i(cv::Point2i(0, 0), cv::Point2i(1280, 480))));
+      // rendered_image0.copyTo(temp(cv::Rect2i(cv::Point2i(0, 480), cv::Point2i(640, 960))));
+      // out_image2.copyTo(temp(cv::Rect2i(cv::Point2i(640, 480), cv::Point2i(1280, 960))));
+      // cv::imshow("test", temp);
+      // cv::waitKey(1);
+
+      // if (!video.is_recording())
+      //   video.create_video("1.avi");
+      // video.add_frame(temp);
     }
   }
 

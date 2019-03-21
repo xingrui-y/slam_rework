@@ -6,7 +6,7 @@
 #include <cuda_runtime.h>
 
 #define MAX_THREAD 1024
-#define WARP_SIZE 32
+#define MAX_WARP_SIZE 32
 
 struct DeviceIntrinsicMatrix
 {

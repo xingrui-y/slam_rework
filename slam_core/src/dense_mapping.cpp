@@ -10,16 +10,24 @@ public:
   ~DenseMappingImpl();
   void update(RgbdImagePtr current_image);
   void raycast(RgbdImagePtr current_image);
+  void raycast(KeyPointStructPtr reference);
 
   IntrinsicMatrix intrinsic_matrix_;
   std::shared_ptr<MapStruct> map_struct_;
-  const int integration_level_ = 0;
+
+  // for raycast
   cv::cuda::GpuMat cast_vmap_;
   cv::cuda::GpuMat cast_nmap_;
   cv::cuda::GpuMat zrange_x_;
   cv::cuda::GpuMat zrange_y_;
+
+  // for map udate
   cv::cuda::GpuMat flag;
   cv::cuda::GpuMat pos_array;
+  const int integration_level_ = 0;
+
+  // for key point raycast
+  cv::cuda::GpuMat cast_pos_;
 };
 
 DenseMapping::DenseMappingImpl::DenseMappingImpl(const IntrinsicMatrixPyramidPtr &intrinsics_pyr)
@@ -74,6 +82,15 @@ void DenseMapping::DenseMappingImpl::raycast(RgbdImagePtr current_image)
   }
 }
 
+void DenseMapping::DenseMappingImpl::raycast(KeyPointStructPtr reference)
+{
+  RgbdFramePtr reference_frame = reference->get_reference_frame();
+  auto key_points3d = reference->get_key_points_3d();
+  thrust::host_vector<float2> key_point_pos2d;
+  std::transform(key_points3d.begin(), key_points3d.end(), std::back_inserter(key_point_pos2d), [](Point3d pt) -> float2 { return make_float2(pt.kp_.pt.x, pt.kp_.pt.y); });
+  thrust::device_vector<float2> device_pos2d = key_point_pos2d;
+}
+
 DenseMapping::DenseMapping(const IntrinsicMatrixPyramidPtr &intrinsics_pyr) : impl(new DenseMappingImpl(intrinsics_pyr))
 {
 }
@@ -86,4 +103,9 @@ void DenseMapping::update(RgbdImagePtr image)
 void DenseMapping::raycast(RgbdImagePtr image)
 {
   impl->raycast(image);
+}
+
+void DenseMapping::raycast(KeyPointStructPtr reference)
+{
+  impl->raycast(reference);
 }

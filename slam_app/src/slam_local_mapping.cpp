@@ -10,28 +10,27 @@
 class SlamLocalMapping::SlamLocalMappingImpl
 {
   public:
-    SlamLocalMappingImpl(DataSource *source);
+    SlamLocalMappingImpl(DataSource *source, SimpleConfigStruct config_struct);
     void visualisation_loop();
 
-    bool shutdown = false;
+    bool shutdown;
     cv::Mat image;
     cv::Mat depth, depth_float;
     cv::cuda::GpuMat cast_vmap_, cast_nmap_;
     IntrinsicMatrixPyramidPtr intrinsics_pyr_;
     std::shared_ptr<SlamSystem> system_;
     std::shared_ptr<GlDisplay> display_;
-    // std::shared_ptr<DenseMapping> mapping_;
+    std::queue<int> message_queue_;
 };
 
-SlamLocalMapping::SlamLocalMappingImpl::SlamLocalMappingImpl(DataSource *source)
+SlamLocalMapping::SlamLocalMappingImpl::SlamLocalMappingImpl(DataSource *source, SimpleConfigStruct config_struct) : shutdown(false)
 {
-    IntrinsicMatrix base_intrinsic_matrix = IntrinsicMatrix(640, 480, 517.3f, 516.5, 318.6, 255.3);
     // IntrinsicMatrix base_intrinsic_matrix = IntrinsicMatrix(640, 480, 520.149963f, 516.175781f, 309.993548f, 227.090932f);
     // IntrinsicMatrix base_intrinsic_matrix = IntrinsicMatrix(640, 480, 525, 525, 320, 240);
-    intrinsics_pyr_ = std::make_shared<IntrinsicMatrixPyramid>(base_intrinsic_matrix, 5);
+    IntrinsicMatrix base_intrinsic_matrix = IntrinsicMatrix(config_struct.width, config_struct.height, config_struct.fx, config_struct.fy, config_struct.cx, config_struct.cy);
+    intrinsics_pyr_ = std::make_shared<IntrinsicMatrixPyramid>(base_intrinsic_matrix, config_struct.pyramid_level);
 
     system_ = std::make_shared<SlamSystem>(intrinsics_pyr_);
-    // mapping_ = std::make_shared<DenseMapping>(intrinsics_pyr_);
 
     system_->set_initial_pose(source->get_starting_pose());
     std::thread t_display(&SlamLocalMapping::SlamLocalMappingImpl::visualisation_loop, this);
@@ -43,23 +42,6 @@ SlamLocalMapping::SlamLocalMappingImpl::SlamLocalMappingImpl(DataSource *source)
 
         depth.convertTo(depth_float, CV_32FC1, source->get_depth_scale());
         system_->update(image, depth_float, source->get_current_id(), source->get_current_timestamp());
-
-        // if (mapping_)
-        // {
-        //     RgbdImagePtr image = system_->get_reference_image();
-        //     mapping_->update(image);
-        //     mapping_->raycast(image);
-        //     image->resize_device_map();
-
-        //     cv::cuda::GpuMat vmap = image->get_vmap();
-        //     cv::cuda::GpuMat nmap = image->get_nmap();
-        //     cv::cuda::GpuMat rendered_image = image->get_rendered_image();
-
-        //     cv::Mat img;
-        //     rendered_image.download(img);
-        //     cv::imshow("img", img);
-        //     cv::waitKey(1);
-        // }
 
         if (display_)
         {
@@ -85,6 +67,6 @@ void SlamLocalMapping::SlamLocalMappingImpl::visualisation_loop()
     shutdown = true;
 }
 
-SlamLocalMapping::SlamLocalMapping(DataSource *source) : impl(new SlamLocalMappingImpl(source))
+SlamLocalMapping::SlamLocalMapping(DataSource *source, SimpleConfigStruct config_struct) : impl(new SlamLocalMappingImpl(source, config_struct))
 {
 }

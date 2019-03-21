@@ -8,14 +8,16 @@
 #include "rgbd_image.h"
 #include "intrinsic_matrix.h"
 
+struct Point3d;
 class KeyPointStruct;
+typedef std::shared_ptr<Point3d> Point3dPtr;
 typedef std::shared_ptr<KeyPointStruct> KeyPointStructPtr;
 
 struct Point3d
 {
-  float x_, y_;         // projection on the image
   Eigen::Vector3f pos_; // 3d positions
   cv::Mat descriptor_;  // surf
+  cv::KeyPoint kp_;     // cv key point
   std::map<RgbdFramePtr, int> observations_;
 };
 
@@ -28,9 +30,10 @@ public:
   cv::Mat get_image() const;
   std::vector<cv::KeyPoint> get_key_points_cv() const;
   std::vector<Point3d> get_key_points_3d() const;
-  void project_and_show(const RgbdFramePtr frame, const Sophus::SE3d pose, const IntrinsicMatrix K);
+  RgbdFramePtr get_reference_frame() const;
   void detect(const RgbdFramePtr frame, const IntrinsicMatrix K);
-  int match(KeyPointStructPtr reference_struct, Sophus::SE3d pose_to_ref, IntrinsicMatrix K);
+  void project_and_show(const KeyPointStructPtr current, const IntrinsicMatrix K, cv::Mat &out_image);
+  int match(KeyPointStructPtr reference_struct, Sophus::SE3d pose_to_ref, IntrinsicMatrix K, cv::Mat &out_image);
 
 private:
   class KeyPointStructImpl;
