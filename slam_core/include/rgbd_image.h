@@ -42,9 +42,11 @@ class RgbdFrame
 {
 public:
   RgbdFrame() = delete;
+  ~RgbdFrame();
   RgbdFrame(const RgbdFrame &other) = delete;
-  RgbdFrame(const cv::Mat &image, const cv::Mat &depth_float, ulong id, double time_stamp);
+  RgbdFrame(const cv::Mat &image, const cv::Mat &depth_float, size_t id, double time_stamp);
 
+  size_t get_id() const;
   cv::Mat get_image() const;
   cv::Mat get_depth() const;
   Sophus::SE3d get_pose() const;

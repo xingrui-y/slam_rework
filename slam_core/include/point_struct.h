@@ -15,10 +15,18 @@ typedef std::shared_ptr<KeyPointStruct> KeyPointStructPtr;
 
 struct Point3d
 {
-  Eigen::Vector3f pos_; // 3d positions
-  cv::Mat descriptor_;  // surf
+  Eigen::Vector3d pos_; // 3d positions
   cv::KeyPoint kp_;     // cv key point
-  std::map<RgbdFramePtr, int> observations_;
+  RgbdFramePtr reference_frame_;
+  std::map<const size_t, int> observations_;
+};
+
+struct KeyPoint
+{
+  cv::KeyPoint kp_;
+  float z_;
+  Point3dPtr pt3d_;
+  cv::Mat descriptor_;
 };
 
 class KeyPointStruct
@@ -26,14 +34,15 @@ class KeyPointStruct
 public:
   KeyPointStruct();
 
+  int detect(const RgbdFramePtr frame);
+  int match(KeyPointStructPtr current_struct, IntrinsicMatrix K, bool count_only);
+  int create_points(int maximum_number, const IntrinsicMatrix K);
+
   cv::Mat compute();
   cv::Mat get_image() const;
-  std::vector<cv::KeyPoint> get_key_points_cv() const;
-  std::vector<Point3d> get_key_points_3d() const;
   RgbdFramePtr get_reference_frame() const;
-  void detect(const RgbdFramePtr frame, const IntrinsicMatrix K);
-  void project_and_show(const KeyPointStructPtr current, const IntrinsicMatrix K, cv::Mat &out_image);
-  int match(KeyPointStructPtr reference_struct, Sophus::SE3d pose_to_ref, IntrinsicMatrix K, cv::Mat &out_image);
+  std::vector<cv::KeyPoint> get_key_points_cv() const;
+  std::vector<KeyPoint> &get_key_points();
 
 private:
   class KeyPointStructImpl;

@@ -156,7 +156,7 @@ RgbdFramePtr RgbdImage::get_reference_frame() const
 class RgbdFrame::RgbdFrameImpl
 {
   public:
-    RgbdFrameImpl(const cv::Mat &image, const cv::Mat &depth_float, ulong id, double time_stamp);
+    RgbdFrameImpl(const cv::Mat &image, const cv::Mat &depth_float, size_t id, double time_stamp);
 
     cv::Mat image_;
     cv::Mat depth_;
@@ -167,13 +167,23 @@ class RgbdFrame::RgbdFrameImpl
     IntrinsicMatrixPyramidPtr intrinsics_pyr_;
 };
 
-RgbdFrame::RgbdFrameImpl::RgbdFrameImpl(const cv::Mat &image, const cv::Mat &depth_float, ulong id, double time_stamp)
+RgbdFrame::RgbdFrameImpl::RgbdFrameImpl(const cv::Mat &image, const cv::Mat &depth_float, size_t id, double time_stamp)
     : image_(image.clone()), depth_(depth_float.clone()), id_(id), time_stamp_(time_stamp)
 {
 }
 
-RgbdFrame::RgbdFrame(const cv::Mat &image, const cv::Mat &depth_float, ulong id, double time_stamp) : impl(new RgbdFrameImpl(image, depth_float, id, time_stamp))
+RgbdFrame::RgbdFrame(const cv::Mat &image, const cv::Mat &depth_float, size_t id, double time_stamp) : impl(new RgbdFrameImpl(image, depth_float, id, time_stamp))
 {
+}
+
+RgbdFrame::~RgbdFrame()
+{
+    // std::cout << "frame id: " << impl->id_ << " is released!" << std::endl;
+}
+
+size_t RgbdFrame::get_id() const
+{
+    return impl->id_;
 }
 
 cv::Mat RgbdFrame::get_image() const

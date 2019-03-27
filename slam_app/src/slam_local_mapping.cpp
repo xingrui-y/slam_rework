@@ -12,6 +12,8 @@ class SlamLocalMapping::SlamLocalMappingImpl
   public:
     SlamLocalMappingImpl(DataSource *source, SimpleConfigStruct config_struct);
     void visualisation_loop();
+    void constraint_searching_loop();
+    void update_display() const;
 
     bool shutdown;
     cv::Mat image;
@@ -34,6 +36,9 @@ SlamLocalMapping::SlamLocalMappingImpl::SlamLocalMappingImpl(DataSource *source,
 
     system_->set_initial_pose(source->get_starting_pose());
     std::thread t_display(&SlamLocalMapping::SlamLocalMappingImpl::visualisation_loop, this);
+    std::thread t_optimize(&SlamLocalMapping::SlamLocalMappingImpl::constraint_searching_loop, this);
+
+    bool ground_truth_set = false;
 
     while (source && source->read_next_images(image, depth) && !shutdown)
     {
@@ -43,17 +48,31 @@ SlamLocalMapping::SlamLocalMappingImpl::SlamLocalMappingImpl(DataSource *source,
         depth.convertTo(depth_float, CV_32FC1, source->get_depth_scale());
         system_->update(image, depth_float, source->get_current_id(), source->get_current_timestamp());
 
-        if (display_)
+        update_display();
+
+        if (display_ && !ground_truth_set)
         {
-            display_->set_camera_trajectory(system_->get_camera_trajectory());
+            ground_truth_set = false;
             display_->set_ground_truth_trajectory(source->get_groundtruth());
-            display_->set_current_pose(system_->get_current_pose());
-            display_->set_keyframe_poses(system_->get_keyframe_poses());
         }
     }
 
     system_->finish_pending_works();
+    update_display();
+
     t_display.join();
+    t_optimize.join();
+}
+
+void SlamLocalMapping::SlamLocalMappingImpl::update_display() const
+{
+    if (display_)
+    {
+        display_->set_camera_trajectory(system_->get_camera_trajectory());
+        display_->set_current_pose(system_->get_current_pose());
+        display_->set_keyframe_poses(system_->get_keyframe_poses());
+        display_->set_current_key_points(system_->get_current_key_points());
+    }
 }
 
 void SlamLocalMapping::SlamLocalMappingImpl::visualisation_loop()
@@ -65,6 +84,28 @@ void SlamLocalMapping::SlamLocalMappingImpl::visualisation_loop()
     }
 
     shutdown = true;
+}
+
+void SlamLocalMapping::SlamLocalMappingImpl::constraint_searching_loop()
+{
+    int counter = 0;
+
+    while (!shutdown)
+    {
+        if (system_)
+        {
+            if (system_->search_constraint())
+                counter++;
+
+            if (counter > 10)
+            {
+                system_->run_bundle_adjustment();
+                counter = 0;
+            }
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
 }
 
 SlamLocalMapping::SlamLocalMapping(DataSource *source, SimpleConfigStruct config_struct) : impl(new SlamLocalMappingImpl(source, config_struct))

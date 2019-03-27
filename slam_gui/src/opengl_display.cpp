@@ -1,7 +1,6 @@
 #include "opengl_display.h"
 #include <sophus/se3.hpp>
 #include <pangolin/pangolin.h>
-#include <pangolin/gl/glcuda.h>
 #include <pangolin/gl/glvbo.h>
 #include <vector>
 
@@ -27,6 +26,9 @@ MeshBuffer::MeshBuffer() : num_elements(0)
 
 MeshBuffer::~MeshBuffer()
 {
+    delete buffer_vertex;
+    delete buffer_normal;
+    delete buffer_texture;
 }
 
 class GlDisplay::GlDisplayImpl
@@ -46,6 +48,7 @@ class GlDisplay::GlDisplayImpl
     void draw_camera_trajectory() const;
     void draw_ground_truth_trajectory() const;
     void draw_mesh_shaded(pangolin::GlSlProgram *program);
+    void draw_current_key_points() const;
 
     pangolin::OpenGlRenderState camera;
     pangolin::View model_view_camera;
@@ -57,6 +60,7 @@ class GlDisplay::GlDisplayImpl
     pangolin::Var<bool> *btn_show_ground_truth;
     pangolin::Var<bool> *btn_show_camera_trajectory;
     pangolin::Var<bool> *btn_show_shaded_mesh;
+    pangolin::Var<bool> *btn_show_current_key_ponits;
     pangolin::Var<bool> *btn_show_current_camera;
     pangolin::Var<bool> *btn_show_keyframe_graph;
 
@@ -64,6 +68,7 @@ class GlDisplay::GlDisplayImpl
     pangolin::GlSlProgram phong_shader;
 
     Sophus::SE3d current_pose;
+    std::vector<Eigen::Vector3f> key_points_current;
     std::vector<Sophus::SE3d> ground_truth;
     std::vector<Sophus::SE3d> camera_trajectory;
     std::vector<Sophus::SE3d> keyframe_poses;
@@ -101,12 +106,31 @@ GlDisplay::GlDisplayImpl::GlDisplayImpl(int width, int height)
     btn_show_shaded_mesh = new pangolin::Var<bool>("MainUI.Show Mesh Phong", true, true);
     btn_show_current_camera = new pangolin::Var<bool>("MainUI.Show Camera", false, true);
     btn_show_keyframe_graph = new pangolin::Var<bool>("MainUI.Show Key Frame Graph", false, true);
+    btn_show_current_key_ponits = new pangolin::Var<bool>("MainUI.Show Current Key Points", true, true);
 }
 
 void GlDisplay::GlDisplayImpl::switch_mesh_buffer()
 {
     std::lock_guard<std::mutex> lock(mutex_buffer_);
     std::swap(buffer[0], buffer[1]);
+}
+
+void GlDisplay::GlDisplayImpl::draw_current_key_points() const
+{
+    std::vector<GLfloat> points;
+    for (int i = 0; i < key_points_current.size(); ++i)
+    {
+        auto key = key_points_current[i];
+        key = current_pose.cast<float>() * key;
+        points.push_back(key(0));
+        points.push_back(key(1));
+        points.push_back(key(2));
+    }
+
+    glPointSize(5.0f);
+    glColor3f(0.0, 0.5, 1.0);
+    pangolin::glDrawVertices(points.size() / 3, (GLfloat *)&points[0], GL_POINTS, 3);
+    glPointSize(1.0f);
 }
 
 void GlDisplay::GlDisplayImpl::draw_mesh_shaded(pangolin::GlSlProgram *program)
@@ -193,6 +217,9 @@ void GlDisplay::GlDisplayImpl::draw_frame()
 
     if (*btn_show_current_camera)
         draw_camera(current_pose);
+
+    if (*btn_show_current_key_ponits)
+        draw_current_key_points();
 
     pangolin::FinishFrame();
 }
@@ -306,6 +333,11 @@ void GlDisplay::set_camera_trajectory(const std::vector<Sophus::SE3d> camera)
 void GlDisplay::set_keyframe_poses(const std::vector<Sophus::SE3d> keyframes)
 {
     impl->keyframe_poses = keyframes;
+}
+
+void GlDisplay::set_current_key_points(const std::vector<Eigen::Vector3f> keypoints)
+{
+    impl->key_points_current = keypoints;
 }
 
 void GlDisplay::upload_mesh(const void *vertices, const void *normal, const void *texture, const size_t &size)

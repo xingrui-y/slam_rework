@@ -8,6 +8,7 @@ class DenseOdometry::DenseOdometryImpl
 public:
   DenseOdometryImpl(const IntrinsicMatrixPyramidPtr intrinsics_pyr);
   void track_frame(RgbdFramePtr current_frame);
+  void track_frame_keyframe_based(RgbdFramePtr current_frame);
   bool keyframe_needed() const;
   void create_keyframe();
 
@@ -43,6 +44,7 @@ void DenseOdometry::DenseOdometryImpl::create_keyframe()
 {
   keyframe_needed_ = false;
   current_keyframe_ = last_frame_;
+  // current_image_.swap(reference_image_);
 }
 
 void DenseOdometry::DenseOdometryImpl::track_frame(RgbdFramePtr current_frame)
@@ -74,6 +76,40 @@ void DenseOdometry::DenseOdometryImpl::track_frame(RgbdFramePtr current_frame)
 
     last_frame_ = current_frame;
     current_image_.swap(reference_image_);
+  }
+  else
+  {
+    tracking_lost_ = true;
+  }
+}
+
+void DenseOdometry::DenseOdometryImpl::track_frame_keyframe_based(RgbdFramePtr current_frame)
+{
+  current_image_->upload(current_frame, intrinsics_pyr_);
+
+  if (current_keyframe_ != nullptr)
+  {
+    context_.use_initial_guess_ = true;
+    context_.initial_estimate_ = current_keyframe_->get_pose().inverse() * last_frame_->get_pose();
+    context_.intrinsics_pyr_ = intrinsics_pyr_;
+    context_.max_iterations_ = {10, 5, 3, 3, 3};
+
+    result_ = tracker_->compute_transform(reference_image_, current_image_, context_);
+  }
+  else
+  {
+    last_frame_ = current_frame;
+    keyframe_needed_ = true;
+    return;
+  }
+
+  if (result_.sucess)
+  {
+    auto pose = current_keyframe_->get_pose() * result_.update;
+    current_frame->set_reference_frame(current_keyframe_);
+    current_frame->set_pose(pose);
+
+    last_frame_ = current_frame;
   }
   else
   {
@@ -120,15 +156,3 @@ void DenseOdometry::create_keyframe()
 {
   impl->create_keyframe();
 }
-
-// std::vector<Sophus::SE3d> DenseOdometry::get_camera_trajectory() const
-// {
-//   return impl->camera_trajectory_;
-// }
-
-// std::vector<Sophus::SE3d> DenseOdometry::get_keyframe_poses() const
-// {
-//   std::vector<Sophus::SE3d> list_all_keyframe_poses;
-//   std::transform(impl->keyframe_list_.begin(), impl->keyframe_list_.end(), std::back_inserter(list_all_keyframe_poses), [](const RgbdFramePtr frame) -> Sophus::SE3d { return frame->get_pose(); });
-//   return list_all_keyframe_poses;
-// }

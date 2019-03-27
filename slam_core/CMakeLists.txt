@@ -23,12 +23,12 @@ PRIVATE
 )
 
 target_link_libraries(${PROJECT_NAME}
+PUBLIC
     slam_util
     slam_cuda
     Eigen3::Eigen
     ${CERES_LIBRARIES}
     ${OpenCV_LIBRARIES}
-    ${CUDA_LIBRARIES}
 )
 
 set(${PROJECT_NAME}_INCLUDE_DIRS ${PROJECT_SOURCE_DIR}/include CACHE INTERNAL "" FORCE)

@@ -1,6 +1,7 @@
 #include <memory>
 #include "program_options.h"
 #include "openni_camera.h"
+#include "glog/logging.h"
 #include "slam_local_mapping.h"
 #include "tum_dataset_wrapper.h"
 #include "simple_config_file_loader.h"
@@ -11,6 +12,7 @@ int main(int argc, char *argv[])
     if (!po.parse(argc, argv))
         exit(-1);
 
+    google::InitGoogleLogging(argv[0]);
     std::shared_ptr<SlamLocalMapping> slam;
 
     SimpleConfigFileLoader loader;
@@ -23,7 +25,7 @@ int main(int argc, char *argv[])
     else
     {
         config_struct.width = 640;
-        config_struct.height = 320;
+        config_struct.height = 480;
         config_struct.fx = 528.f;
         config_struct.fy = 528.f;
         config_struct.cx = 320.f;

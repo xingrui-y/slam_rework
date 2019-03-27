@@ -7,6 +7,7 @@
 #include "stop_watch.h"
 #include "opencv_recorder.h"
 #include <memory>
+#include <mutex>
 
 class SlamSystem::SlamSystemImpl
 {
@@ -15,11 +16,14 @@ public:
   SlamSystemImpl(const SlamSystemImpl &) = delete;
 
   SlamSystemImpl(const IntrinsicMatrixPyramidPtr &intrinsic_pyr);
-  void update(const cv::Mat &image, const cv::Mat &depth_float, const ulong &id, const double &time_stamp);
+  void update(const cv::Mat &image, const cv::Mat &depth_float, const size_t &id, const double &time_stamp);
 
   bool compute_distance_score() const;
   bool keyframe_needed() const;
   void create_keyframe();
+  void finish_pending_work();
+  bool search_constraint();
+  void run_bundle_adjustment();
 
   IntrinsicMatrixPyramidPtr intrinsics_pyr_;
   std::unique_ptr<DenseOdometry> odometry_;
@@ -35,13 +39,21 @@ public:
 
   KeyPointStructPtr reference_point_struct_;
   KeyPointStructPtr current_point_struct_;
+  std::vector<KeyPointStructPtr> key_struct_list_;
+  std::queue<KeyPointStructPtr> key_struct_buffer_;
+  std::mutex key_struct_mutex_guard_;
   bool system_initialised_;
+  int num_points_matched_;
+  int num_points_detected_;
+
+  // slam::util::CVRecorder video(1280, 960, 10);
 };
 
 SlamSystem::SlamSystemImpl::SlamSystemImpl(const IntrinsicMatrixPyramidPtr &intrinsics_pyr)
     : intrinsics_pyr_(intrinsics_pyr), odometry_(new DenseOdometry(intrinsics_pyr)), bundler_(new BundleAdjuster()),
-      mapping_(new DenseMapping(intrinsics_pyr)), reference_point_struct_(new KeyPointStruct()),
-      current_point_struct_(new KeyPointStruct()), system_initialised_(false), current_keyframe_(nullptr)
+      mapping_(new DenseMapping(intrinsics_pyr)), reference_point_struct_(new KeyPointStruct()), num_points_matched_(0),
+      current_point_struct_(new KeyPointStruct()), system_initialised_(false), current_keyframe_(nullptr),
+      num_points_detected_(0)
 {
 }
 
@@ -54,7 +66,7 @@ bool SlamSystem::SlamSystemImpl::compute_distance_score() const
   double angle_diff = z_keyframe.dot(z_frame);
   double dist_diff = (dist_frame - dist_keyframe).norm();
 
-  if (angle_diff < 0.8 || dist_diff > 0.2)
+  if (angle_diff < 0.9 || dist_diff > 0.1)
     return true;
 
   return false;
@@ -68,6 +80,9 @@ bool SlamSystem::SlamSystemImpl::keyframe_needed() const
   if (compute_distance_score())
     return true;
 
+  if (num_points_matched_ < 40)
+    return true;
+
   return false;
 }
 
@@ -77,18 +92,86 @@ void SlamSystem::SlamSystemImpl::create_keyframe()
   last_keyframe_ = current_keyframe_;
   current_keyframe_ = odometry_->get_current_keyframe();
   keyframes_.push_back(current_keyframe_);
-  KeyPointStructPtr tmp_point_struct = reference_point_struct_;
-  reference_point_struct_ = std::make_shared<KeyPointStruct>();
-  reference_point_struct_->detect(current_keyframe_, intrinsics_pyr_->get_intrinsic_matrix_at(0));
 
-  if (last_keyframe_ != nullptr)
+  if (last_keyframe_ == nullptr)
   {
-    // const Sophus::SE3d pose_to_ref = last_keyframe_->get_pose().inverse() * current_keyframe_->get_pose();
-    // reference_point_struct_->match(tmp_point_struct, pose_to_ref, intrinsics_pyr_->get_intrinsic_matrix_at(0));
+    reference_point_struct_ = std::make_shared<KeyPointStruct>();
+    num_points_detected_ = reference_point_struct_->detect(current_keyframe_);
+
+    if (num_points_detected_ == 0)
+      return;
+
+    reference_point_struct_->create_points(200, intrinsics_pyr_->get_intrinsic_matrix_at(0));
   }
+  else
+  {
+    std::shared_ptr<KeyPointStruct> temp_point_struct = std::make_shared<KeyPointStruct>();
+    num_points_detected_ = temp_point_struct->detect(current_keyframe_);
+
+    if (num_points_detected_ == 0)
+      return;
+
+    int num_matched = reference_point_struct_->match(temp_point_struct, intrinsics_pyr_->get_intrinsic_matrix_at(0), false);
+    reference_point_struct_ = temp_point_struct;
+
+    if (num_matched < 200)
+      reference_point_struct_->create_points(200, intrinsics_pyr_->get_intrinsic_matrix_at(0));
+  }
+
+  key_struct_buffer_.push(reference_point_struct_);
 }
-slam::util::CVRecorder video(1280, 960, 10);
-void SlamSystem::SlamSystemImpl::update(const cv::Mat &image, const cv::Mat &depth_float, const ulong &id, const double &time_stamp)
+
+double compute_se3_to_se3_dist(const Sophus::SE3d pose_1, const Sophus::SE3d pose_2)
+{
+  Sophus::Vector3d trans_1 = pose_1.translation();
+  Sophus::Vector3d trans_2 = pose_2.translation();
+  double dist = (trans_1 - trans_2).norm();
+
+  // TODO : dist based on rotation ?
+
+  return dist;
+}
+
+bool SlamSystem::SlamSystemImpl::search_constraint()
+{
+  std::lock_guard<std::mutex> lock(key_struct_mutex_guard_);
+  if (key_struct_buffer_.size() > 0)
+  {
+    auto key_struct = key_struct_buffer_.front();
+    auto keyframe = key_struct->get_reference_frame();
+    auto pose_se3 = keyframe->get_pose();
+
+    const double dist_threshold = 0.5;
+
+    for (int i = 0; i < key_struct_list_.size(); ++i)
+    {
+      auto other_key_struct = key_struct_list_[i];
+      auto other_keyframe = other_key_struct->get_reference_frame();
+      auto other_pose_se3 = other_keyframe->get_pose();
+
+      double dist = compute_se3_to_se3_dist(other_pose_se3, pose_se3);
+      if (dist < dist_threshold)
+      {
+        auto num_matched = other_key_struct->match(key_struct, intrinsics_pyr_->get_intrinsic_matrix_at(0), false);
+      }
+    }
+
+    key_struct_buffer_.pop();
+    key_struct_list_.emplace_back(std::move(key_struct));
+    return true;
+  }
+
+  return false;
+}
+
+void SlamSystem::SlamSystemImpl::run_bundle_adjustment()
+{
+  std::lock_guard<std::mutex> lock(key_struct_mutex_guard_);
+  bundler_->set_up_bundler(key_struct_list_);
+  bundler_->run_bundle_adjustment(intrinsics_pyr_->get_intrinsic_matrix_at(0));
+}
+
+void SlamSystem::SlamSystemImpl::update(const cv::Mat &image, const cv::Mat &depth_float, const size_t &id, const double &time_stamp)
 {
   current_frame_ = std::make_shared<RgbdFrame>(image, depth_float, id, time_stamp);
 
@@ -102,7 +185,7 @@ void SlamSystem::SlamSystemImpl::update(const cv::Mat &image, const cv::Mat &dep
 
   if (!odometry_->is_tracking_lost())
   {
-    RgbdImagePtr reference_image = odometry_->get_reference_image();
+    auto reference_image = odometry_->get_reference_image();
 
     mapping_->update(reference_image);
     mapping_->raycast(reference_image);
@@ -115,32 +198,11 @@ void SlamSystem::SlamSystemImpl::update(const cv::Mat &image, const cv::Mat &dep
     cv::imshow("rendered image", img);
     cv::waitKey(1);
 
-    if (current_keyframe_ != nullptr)
+    if (current_point_struct_ != nullptr)
     {
-      cv::Mat out_image, out_image2;
-      IntrinsicMatrix K_0 = intrinsics_pyr_->get_intrinsic_matrix_at(0);
       current_point_struct_ = std::make_shared<KeyPointStruct>();
-      current_point_struct_->detect(current_frame_, K_0);
-      reference_point_struct_->project_and_show(current_point_struct_, K_0, out_image2);
-      auto pose_to_ref = current_keyframe_->get_pose().inverse() * current_frame_->get_pose();
-      current_point_struct_->detect(current_frame_, K_0);
-      current_point_struct_->match(reference_point_struct_, pose_to_ref, K_0, out_image);
-
-      // cv::Mat temp(960, 1280, CV_8UC3);
-      // cv::Mat rendered_image0(480, 640, CV_8UC3);
-      // cv::cvtColor(out_image, out_image, cv::COLOR_RGB2BGR);
-      // cv::cvtColor(out_image2, out_image2, cv::COLOR_RGB2BGR);
-      // cv::cvtColor(img, rendered_image0, cv::COLOR_RGBA2BGR);
-
-      // out_image.copyTo(temp(cv::Rect2i(cv::Point2i(0, 0), cv::Point2i(1280, 480))));
-      // rendered_image0.copyTo(temp(cv::Rect2i(cv::Point2i(0, 480), cv::Point2i(640, 960))));
-      // out_image2.copyTo(temp(cv::Rect2i(cv::Point2i(640, 480), cv::Point2i(1280, 960))));
-      // cv::imshow("test", temp);
-      // cv::waitKey(1);
-
-      // if (!video.is_recording())
-      //   video.create_video("1.avi");
-      // video.add_frame(temp);
+      current_point_struct_->detect(current_frame_);
+      num_points_matched_ = reference_point_struct_->match(current_point_struct_, intrinsics_pyr_->get_intrinsic_matrix_at(0), true);
     }
   }
 
@@ -150,12 +212,21 @@ void SlamSystem::SlamSystemImpl::update(const cv::Mat &image, const cv::Mat &dep
   frame_poses_.push_back(current_frame_->get_pose());
 }
 
+void SlamSystem::SlamSystemImpl::finish_pending_work()
+{
+  while (key_struct_buffer_.size() > 0)
+    search_constraint();
+
+  bundler_->set_up_bundler(key_struct_list_);
+  bundler_->run_bundle_adjustment(intrinsics_pyr_->get_intrinsic_matrix_at(0));
+}
+
 SlamSystem::SlamSystem(const IntrinsicMatrixPyramidPtr &intrinsic_pyr)
     : impl(new SlamSystemImpl(intrinsic_pyr))
 {
 }
 
-void SlamSystem::update(const cv::Mat &image, const cv::Mat &depth_float, const ulong &id, const double &time_stamp)
+void SlamSystem::update(const cv::Mat &image, const cv::Mat &depth_float, const size_t &id, const double &time_stamp)
 {
   impl->update(image, depth_float, id, time_stamp);
 }
@@ -182,6 +253,14 @@ std::vector<Sophus::SE3d> SlamSystem::get_keyframe_poses() const
   return tmp;
 }
 
+std::vector<Eigen::Vector3f> SlamSystem::get_current_key_points() const
+{
+  auto keypoints = impl->current_point_struct_->get_key_points();
+  std::vector<Eigen::Vector3f> temp_keypoints;
+  std::transform(keypoints.begin(), keypoints.end(), std::back_inserter(temp_keypoints), [](KeyPoint &pt) { if(pt.pt3d_) return pt.pt3d_->pos_.cast<float>(); });
+  return temp_keypoints;
+}
+
 Sophus::SE3d SlamSystem::get_current_pose() const
 {
   return impl->current_frame_->get_pose();
@@ -189,9 +268,20 @@ Sophus::SE3d SlamSystem::get_current_pose() const
 
 void SlamSystem::finish_pending_works()
 {
+  impl->finish_pending_work();
 }
 
 void SlamSystem::set_initial_pose(const Sophus::SE3d pose)
 {
   impl->initial_pose_ = pose;
+}
+
+bool SlamSystem::search_constraint()
+{
+  return impl->search_constraint();
+}
+
+void SlamSystem::run_bundle_adjustment()
+{
+  impl->run_bundle_adjustment();
 }

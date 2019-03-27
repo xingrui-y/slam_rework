@@ -2,13 +2,10 @@ project(slam_gui)
 
 add_library(${PROJECT_NAME} SHARED "")
 
-find_package(CUDA 9.2 REQUIRED)
-
 target_include_directories(${PROJECT_NAME}
 PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/glsl
     ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CUDA_INCLUDE_DIRS}
 )
 
 target_sources(${PROJECT_NAME}
@@ -22,11 +19,11 @@ target_link_libraries(${PROJECT_NAME}
     ${Pangolin_LIBRARIES}
 )
 
-set_target_properties(${PROJECT_NAME} 
-PROPERTIES 
-    CUDA_SEPARABLE_COMPILATION ON
-    CUDA_STANDARD 11
-)
+# set_target_properties(${PROJECT_NAME} 
+# PROPERTIES 
+#     CUDA_SEPARABLE_COMPILATION ON
+#     CUDA_STANDARD 11
+# )
 
 set(${PROJECT_NAME}_INCLUDE_DIRS ${PROJECT_SOURCE_DIR}/include CACHE INTERNAL "" FORCE)
 

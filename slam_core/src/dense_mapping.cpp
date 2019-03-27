@@ -84,11 +84,6 @@ void DenseMapping::DenseMappingImpl::raycast(RgbdImagePtr current_image)
 
 void DenseMapping::DenseMappingImpl::raycast(KeyPointStructPtr reference)
 {
-  RgbdFramePtr reference_frame = reference->get_reference_frame();
-  auto key_points3d = reference->get_key_points_3d();
-  thrust::host_vector<float2> key_point_pos2d;
-  std::transform(key_points3d.begin(), key_points3d.end(), std::back_inserter(key_point_pos2d), [](Point3d pt) -> float2 { return make_float2(pt.kp_.pt.x, pt.kp_.pt.y); });
-  thrust::device_vector<float2> device_pos2d = key_point_pos2d;
 }
 
 DenseMapping::DenseMapping(const IntrinsicMatrixPyramidPtr &intrinsics_pyr) : impl(new DenseMappingImpl(intrinsics_pyr))

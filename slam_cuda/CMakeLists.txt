@@ -27,7 +27,7 @@ PROPERTIES
 )
 
 target_link_libraries(${PROJECT_NAME}
-PRIVATE
+PUBLIC
     Eigen3::Eigen
 )
 
