@@ -9,7 +9,7 @@
 
 class SlamLocalMapping::SlamLocalMappingImpl
 {
-  public:
+public:
     SlamLocalMappingImpl(DataSource *source, SimpleConfigStruct config_struct);
     void visualisation_loop();
     void constraint_searching_loop();
@@ -36,7 +36,7 @@ SlamLocalMapping::SlamLocalMappingImpl::SlamLocalMappingImpl(DataSource *source,
 
     system_->set_initial_pose(source->get_starting_pose());
     std::thread t_display(&SlamLocalMapping::SlamLocalMappingImpl::visualisation_loop, this);
-    std::thread t_optimize(&SlamLocalMapping::SlamLocalMappingImpl::constraint_searching_loop, this);
+    // std::thread t_optimize(&SlamLocalMapping::SlamLocalMappingImpl::constraint_searching_loop, this);
 
     bool ground_truth_set = false;
 
@@ -57,11 +57,11 @@ SlamLocalMapping::SlamLocalMappingImpl::SlamLocalMappingImpl(DataSource *source,
         }
     }
 
-    system_->finish_pending_works();
-    update_display();
+    // system_->finish_pending_works();
+    // update_display();
 
     t_display.join();
-    t_optimize.join();
+    // t_optimize.join();
 }
 
 void SlamLocalMapping::SlamLocalMappingImpl::update_display() const

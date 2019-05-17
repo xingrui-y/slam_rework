@@ -4,7 +4,7 @@
 
 class RgbdImage::RgbdImageImpl
 {
-  public:
+public:
     RgbdImageImpl();
     RgbdImageImpl(const int &max_level);
 
@@ -129,13 +129,19 @@ void RgbdImage::upload(const RgbdFramePtr frame, const IntrinsicMatrixPyramidPtr
 void RgbdImage::resize_device_map()
 {
     slam::cuda::resize_device_map(impl->point_cloud_);
-    slam::cuda::resize_device_map(impl->normal_);
+    // slam::cuda::resize_device_map(impl->normal_);
+    slam::cuda::build_normal_pyramid(impl->point_cloud_, impl->normal_);
 }
 
 cv::cuda::GpuMat RgbdImage::get_depth(const int &level) const
 {
     if (level < impl->depth_.size())
         return impl->depth_[level];
+}
+
+cv::cuda::GpuMat RgbdImage::get_raw_depth() const
+{
+    return impl->depth_float_;
 }
 
 cv::cuda::GpuMat RgbdImage::get_image(const int &level) const
@@ -155,7 +161,7 @@ RgbdFramePtr RgbdImage::get_reference_frame() const
 
 class RgbdFrame::RgbdFrameImpl
 {
-  public:
+public:
     RgbdFrameImpl(const cv::Mat &image, const cv::Mat &depth_float, size_t id, double time_stamp);
 
     cv::Mat image_;

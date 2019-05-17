@@ -32,7 +32,7 @@ public:
 
 DenseMapping::DenseMappingImpl::DenseMappingImpl(const IntrinsicMatrixPyramidPtr &intrinsics_pyr)
 {
-  map_struct_ = std::make_shared<MapStruct>(300000, 450000, 100000, 0.004f);
+  map_struct_ = std::make_shared<MapStruct>(300000, 450000, 100000, 0.005f);
   map_struct_->allocate_device_memory();
   map_struct_->reset_map_struct();
 
@@ -53,7 +53,7 @@ void DenseMapping::DenseMappingImpl::update(RgbdImagePtr current_image)
   if (current_frame == nullptr)
     return;
 
-  cv::cuda::GpuMat depth = current_image->get_depth(integration_level_);
+  cv::cuda::GpuMat depth = current_image->get_raw_depth();
   cv::cuda::GpuMat image = current_image->get_image(integration_level_);
   cv::cuda::GpuMat normal = current_image->get_nmap(integration_level_);
   Sophus::SE3d pose = current_frame->get_pose();
@@ -70,16 +70,16 @@ void DenseMapping::DenseMappingImpl::raycast(RgbdImagePtr current_image)
     return;
 
   Sophus::SE3d pose = current_frame->get_pose();
-  slam::map::create_rendering_blocks(*map_struct_, zrange_x_, zrange_y_, pose, intrinsic_matrix_);
+  // slam::map::create_rendering_blocks(*map_struct_, zrange_x_, zrange_y_, pose, intrinsic_matrix_);
 
   uint rendering_block_count = 0;
-  map_struct_->get_rendering_block_count(rendering_block_count);
-  if (rendering_block_count != 0)
-  {
-    cast_vmap_ = current_image->get_vmap(integration_level_);
-    cast_nmap_ = current_image->get_nmap(integration_level_);
-    slam::map::raycast(*map_struct_, cast_vmap_, cast_nmap_, zrange_x_, zrange_y_, pose, intrinsic_matrix_);
-  }
+  // map_struct_->get_rendering_block_count(rendering_block_count);
+  // if (rendering_block_count != 0)
+  // {
+  cast_vmap_ = current_image->get_vmap(integration_level_);
+  cast_nmap_ = current_image->get_nmap(integration_level_);
+  slam::map::raycast(*map_struct_, cast_vmap_, cast_nmap_, zrange_x_, zrange_y_, pose, intrinsic_matrix_);
+  // }
 }
 
 void DenseMapping::DenseMappingImpl::raycast(KeyPointStructPtr reference)

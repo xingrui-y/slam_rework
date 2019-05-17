@@ -21,8 +21,8 @@ void imshow(const char *name, const cv::cuda::GpuMat image)
 void build_depth_pyramid(const cv::cuda::GpuMat &base_depth, std::vector<cv::cuda::GpuMat> &pyramid, const int &max_level)
 {
     assert(max_level == pyramid.size());
-    base_depth.copyTo(pyramid[0]);
-    // cv::cuda::bilateralFilter(base_depth, pyramid[0], 2, 0.05, 0.02);
+    // base_depth.copyTo(pyramid[0]);
+    cv::cuda::bilateralFilter(base_depth, pyramid[0], 5, 1, 1);
 
     for (int level = 1; level < max_level; ++level)
     {
@@ -223,7 +223,7 @@ void image_rendering_phong_shading(const cv::cuda::GpuMat vmap, const cv::cuda::
     if (image.empty())
         image.create(vmap.rows, vmap.cols, CV_8UC4);
 
-    image_rendering_phong_shading_kernel<<<block, thread>>>(vmap, nmap, make_float3(0, 0, 0), image);
+    image_rendering_phong_shading_kernel<<<block, thread>>>(vmap, nmap, make_float3(5, 5, 5), image);
 }
 
 } // namespace cuda

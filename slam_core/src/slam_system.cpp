@@ -46,6 +46,7 @@ public:
   int num_points_matched_;
   int num_points_detected_;
 
+  RgbdImagePtr vis;
   // slam::util::CVRecorder video(1280, 960, 10);
 };
 
@@ -53,7 +54,7 @@ SlamSystem::SlamSystemImpl::SlamSystemImpl(const IntrinsicMatrixPyramidPtr &intr
     : intrinsics_pyr_(intrinsics_pyr), odometry_(new DenseOdometry(intrinsics_pyr)), bundler_(new BundleAdjuster()),
       mapping_(new DenseMapping(intrinsics_pyr)), reference_point_struct_(new KeyPointStruct()), num_points_matched_(0),
       current_point_struct_(new KeyPointStruct()), system_initialised_(false), current_keyframe_(nullptr),
-      num_points_detected_(0)
+      num_points_detected_(0), vis(new RgbdImage())
 {
 }
 
@@ -177,7 +178,9 @@ void SlamSystem::SlamSystemImpl::update(const cv::Mat &image, const cv::Mat &dep
 
   if (!system_initialised_)
   {
-    current_frame_->set_pose(initial_pose_);
+    // current_frame_->set_pose(initial_pose_);
+    auto initpose = Sophus::SE3d(Sophus::SO3d(), Sophus::SE3d::Point(100, 100, 100));
+    vis->upload(current_frame_, intrinsics_pyr_);
     system_initialised_ = true;
   }
 
@@ -190,11 +193,16 @@ void SlamSystem::SlamSystemImpl::update(const cv::Mat &image, const cv::Mat &dep
     mapping_->update(reference_image);
     mapping_->raycast(reference_image);
     reference_image->resize_device_map();
-
-    cv::cuda::GpuMat vmap = reference_image->get_vmap();
-    cv::cuda::GpuMat nmap = reference_image->get_nmap();
     cv::cuda::GpuMat rendered_image = reference_image->get_rendered_image();
+
+    // vis->upload(reference_image->get_reference_frame(), intrinsics_pyr_);
+    // mapping_->raycast(vis);
+    // vis->resize_device_map();
+    // cv::cuda::GpuMat rendered_image = vis->get_rendered_image();
+    // cv::cuda::GpuMat vmap = reference_image->get_vmap();
+    // cv::cuda::GpuMat nmap = reference_image->get_nmap();
     cv::Mat img(rendered_image);
+    cv::resize(img, img, cv::Size(0, 0), 2, 2);
     cv::imshow("rendered image", img);
     cv::waitKey(1);
 

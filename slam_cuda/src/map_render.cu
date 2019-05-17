@@ -332,7 +332,7 @@ struct MapRenderingDelegate
     {
         Voxel *voxel = nullptr;
         map_struct.find_voxel(make_int3(pt3d), voxel);
-        if (voxel != nullptr)
+        if (voxel != nullptr && voxel->get_weight() != 0)
         {
             valid = true;
             return voxel->get_sdf();
@@ -348,60 +348,69 @@ struct MapRenderingDelegate
     {
         float3 xyz = pt - floor(pt);
         float sdf[2], result[4];
+        bool valid_pt;
 
-        sdf[0] = read_sdf(pt, valid);
+        sdf[0] = read_sdf(pt, valid_pt);
         sdf[1] = read_sdf(pt + make_float3(1, 0, 0), valid);
+        valid_pt &= valid;
         result[0] = (1.0f - xyz.x) * sdf[0] + xyz.x * sdf[1];
 
         sdf[0] = read_sdf(pt + make_float3(0, 1, 0), valid);
+        valid_pt &= valid;
         sdf[1] = read_sdf(pt + make_float3(1, 1, 0), valid);
+        valid_pt &= valid;
         result[1] = (1.0f - xyz.x) * sdf[0] + xyz.x * sdf[1];
         result[2] = (1.0f - xyz.y) * result[0] + xyz.y * result[1];
 
         sdf[0] = read_sdf(pt + make_float3(0, 0, 1), valid);
+        valid_pt &= valid;
         sdf[1] = read_sdf(pt + make_float3(1, 0, 1), valid);
+        valid_pt &= valid;
         result[0] = (1.0f - xyz.x) * sdf[0] + xyz.x * sdf[1];
 
         sdf[0] = read_sdf(pt + make_float3(0, 1, 1), valid);
+        valid_pt &= valid;
         sdf[1] = read_sdf(pt + make_float3(1, 1, 1), valid);
+        valid_pt &= valid;
         result[1] = (1.0f - xyz.x) * sdf[0] + xyz.x * sdf[1];
         result[3] = (1.0f - xyz.y) * result[0] + xyz.y * result[1];
+        valid = valid_pt;
         return (1.0f - xyz.z) * result[2] + xyz.z * result[3];
     }
 
-    __device__ __forceinline__ bool read_normal_approximate(const float3 &pt, float3 &n)
-    {
+    // __device__ __forceinline__ bool read_normal_approximate(const float3 &pt, float3 &n)
+    // {
 
-        bool valid;
-        float sdf[6];
-        sdf[0] = read_sdf_interped(pt + make_float3(1, 0, 0), valid);
-        if (isnan(sdf[0]) || sdf[0] == 1.0f || !valid)
-            return false;
+    //     bool valid;
+    //     float sdf[6];
+    //     sdf[0] = read_sdf_interped(pt + make_float3(1, 0, 0), valid);
+    //     if (isnan(sdf[0]) || sdf[0] == 1.0f || !valid)
+    //         return false;
 
-        sdf[1] = read_sdf_interped(pt + make_float3(-1, 0, 0), valid);
-        if (isnan(sdf[1]) || sdf[1] == 1.0f || !valid)
-            return false;
+    //     sdf[1] = read_sdf_interped(pt + make_float3(-1, 0, 0), valid);
+    //     if (isnan(sdf[1]) || sdf[1] == 1.0f || !valid)
+    //         return false;
 
-        sdf[2] = read_sdf_interped(pt + make_float3(0, 1, 0), valid);
-        if (isnan(sdf[2]) || sdf[2] == 1.0f || !valid)
-            return false;
+    //     sdf[2] = read_sdf_interped(pt + make_float3(0, 1, 0), valid);
+    //     if (isnan(sdf[2]) || sdf[2] == 1.0f || !valid)
+    //         return false;
 
-        sdf[3] = read_sdf_interped(pt + make_float3(0, -1, 0), valid);
-        if (isnan(sdf[3]) || sdf[3] == 1.0f || !valid)
-            return false;
+    //     sdf[3] = read_sdf_interped(pt + make_float3(0, -1, 0), valid);
+    //     if (isnan(sdf[3]) || sdf[3] == 1.0f || !valid)
+    //         return false;
 
-        sdf[4] = read_sdf_interped(pt + make_float3(0, 0, 1), valid);
-        if (isnan(sdf[4]) || sdf[4] == 1.0f || !valid)
-            return false;
+    //     sdf[4] = read_sdf_interped(pt + make_float3(0, 0, 1), valid);
+    //     if (isnan(sdf[4]) || sdf[4] == 1.0f || !valid)
+    //         return false;
 
-        sdf[5] = read_sdf_interped(pt + make_float3(0, 0, -1), valid);
-        if (isnan(sdf[5]) || sdf[5] == 1.0f || !valid)
-            return false;
+    //     sdf[5] = read_sdf_interped(pt + make_float3(0, 0, -1), valid);
+    //     if (isnan(sdf[5]) || sdf[5] == 1.0f || !valid)
+    //         return false;
 
-        n = make_float3(sdf[0] - sdf[1], sdf[2] - sdf[3], sdf[4] - sdf[5]);
-        n = normalised(inv_pose.rotate(n));
-        return true;
-    }
+    //     n = make_float3(sdf[0] - sdf[1], sdf[2] - sdf[3], sdf[4] - sdf[5]);
+    //     n = normalised(inv_pose.rotate(n));
+    //     return true;
+    // }
 
     __device__ __forceinline__ float3 unproject(const int &x, const int &y, const float &z) const
     {
@@ -416,25 +425,26 @@ struct MapRenderingDelegate
             return;
 
         vmap.ptr(y)[x] = make_float4(__int_as_float(0x7fffffff));
-        nmap.ptr(y)[x] = make_float4(__int_as_float(0x7fffffff));
+        // nmap.ptr(y)[x] = make_float4(__int_as_float(0x7fffffff));
 
-        int2 local_id;
-        local_id.x = __float2int_rd((float)x / 8);
-        local_id.y = __float2int_rd((float)y / 8);
+        // int2 local_id;
+        // local_id.x = __float2int_rd((float)x / 8);
+        // local_id.y = __float2int_rd((float)y / 8);
 
-        float2 zrange;
-        zrange.x = zrange_x.ptr(local_id.y)[local_id.x];
-        zrange.y = zrange_y.ptr(local_id.y)[local_id.x];
-        if (zrange.y < 1e-3 || zrange.x < 1e-3 || isnan(zrange.x) || isnan(zrange.y))
-            return;
+        // float2 zrange;
+        // zrange.x = zrange_x.ptr(local_id.y)[local_id.x];
+        // zrange.y = zrange_y.ptr(local_id.y)[local_id.x];
+        // if (zrange.y < 1e-3 || zrange.x < 1e-3 || isnan(zrange.x) || isnan(zrange.y))
+        //     return;
 
         float sdf = 1.0f;
+        float last_sdf;
 
-        float3 pt = unproject(x, y, zrange.x);
+        float3 pt = unproject(x, y, 0.3);
         float dist_s = norm(pt) * param.inverse_voxel_size();
         float3 block_s = pose(pt) * param.inverse_voxel_size();
 
-        pt = unproject(x, y, zrange.y);
+        pt = unproject(x, y, 1.5);
         float dist_e = norm(pt) * param.inverse_voxel_size();
         float3 block_e = pose(pt) * param.inverse_voxel_size();
 
@@ -447,24 +457,22 @@ struct MapRenderingDelegate
 
         while (dist_s < dist_e)
         {
+            last_sdf = sdf;
             sdf = read_sdf(result, valid_sdf);
-            if (!valid_sdf)
-            {
-                step = BLOCK_SIZE;
-            }
+
+            if (sdf <= 0.5f && sdf >= -0.5f)
+                sdf = read_sdf_interped(result, valid_sdf);
+
+            if (sdf <= 0.0f)
+                break;
+
+            if (sdf >= 0.f && last_sdf < 0.f)
+                return;
+
+            if (valid_sdf)
+                step = max(sdf * param.raycast_step_scale(), 1.0f);
             else
-            {
-                if (sdf <= 0.1f && sdf >= -0.5f)
-                    sdf = read_sdf_interped(result, valid_sdf);
-
-                if (sdf <= 0.0f)
-                    break;
-
-                if (!isnan(sdf))
-                    step = max(sdf * param.raycast_step_scale(), 1.0f);
-                else
-                    step = BLOCK_SIZE;
-            }
+                step = 2;
 
             result += step * dir;
             dist_s += step;
@@ -479,18 +487,20 @@ struct MapRenderingDelegate
 
             step = sdf * param.raycast_step_scale();
             result += step * dir;
-            found_pt = true;
+
+            if (valid_sdf)
+                found_pt = true;
         }
 
         if (found_pt)
         {
-            float3 normal;
-            if (read_normal_approximate(result, normal))
-            {
-                result = inv_pose(result * param.voxel_size_);
-                vmap.ptr(y)[x] = make_float4(result, 1.0);
-                nmap.ptr(y)[x] = make_float4(normal, 1.0);
-            }
+            // float3 normal;
+            // if (read_normal_approximate(result, normal))
+            // {
+            result = inv_pose(result * param.voxel_size_);
+            vmap.ptr(y)[x] = make_float4(result, 1.0);
+            //     nmap.ptr(y)[x] = make_float4(normal, 1.0);
+            // }
         }
     }
 };

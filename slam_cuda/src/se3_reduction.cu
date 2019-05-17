@@ -145,7 +145,7 @@ struct RgbReduction
     cv::cuda::PtrStep<float> out;
     float3 p_transformed;
 
-  private:
+private:
     float i_c, i_l, dx, dy;
 };
 
@@ -185,8 +185,8 @@ void rgb_reduce(const cv::cuda::GpuMat &curr_intensity,
     rr.fy = K.fy;
     rr.cx = K.cx;
     rr.cy = K.cy;
-    rr.invfx = 1.0 / K.fx;
-    rr.invfy = 1.0 / K.fy;
+    rr.invfx = K.invfx;
+    rr.invfy = K.invfy;
     rr.out = sum;
 
     rgb_reduce_kernel<<<96, 224>>>(rr);
@@ -331,8 +331,8 @@ void icp_reduce(const cv::cuda::GpuMat &curr_vmap,
     icp.rows = rows;
     icp.N = cols * rows;
     icp.pose = pose;
-    icp.angleThresh = 0.6;
-    icp.distThresh = 0.1;
+    icp.angleThresh = cos(30 * 3.14 / 180);
+    icp.distThresh = 0.01;
     icp.fx = K.fx;
     icp.fy = K.fy;
     icp.cx = K.cx;

@@ -167,12 +167,12 @@ __device__ __host__ int MapState::num_excess_entries() const
 
 __device__ __host__ float MapState::truncation_dist() const
 {
-    return 8.0f * voxel_size_;
+    return 5.0f * voxel_size_;
 }
 
 __device__ __host__ float MapState::raycast_step_scale() const
 {
-    return 0.5 * truncation_dist() * inverse_voxel_size();
+    return truncation_dist() * inverse_voxel_size();
 }
 __device__ HashEntry::HashEntry() : ptr_(-1), offset_(-1)
 {
@@ -224,7 +224,7 @@ __device__ float Voxel::get_sdf() const
     return unpack_float(sdf_);
 }
 
-__device__ float Voxel::get_weight() const
+__device__ unsigned char Voxel::get_weight() const
 {
     return weight_;
 }
@@ -234,7 +234,7 @@ __device__ void Voxel::set_sdf(float val)
     sdf_ = pack_float(val);
 }
 
-__device__ void Voxel::set_weight(float val)
+__device__ void Voxel::set_weight(unsigned char val)
 {
     weight_ = val;
 }
@@ -423,7 +423,7 @@ __device__ int MapStruct::voxel_pos_to_local_idx(const int3 &pos) const
 
 __device__ float3 MapStruct::voxel_pos_to_world_pt(const int3 &voxel_pos) const
 {
-    return voxel_pos * param.voxel_size_;
+    return voxel_pos * param.voxel_size_ + 0.5 * param.voxel_size_;
 }
 
 __device__ int3 MapStruct::voxel_pos_to_block_pos(int3 voxel_pos) const

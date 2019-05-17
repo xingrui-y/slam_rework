@@ -13,10 +13,11 @@ include_directories(${slam_gui_INCLUDE_DIRS})
 include_directories(${slam_util_INCLUDE_DIRS})
 
 add_executable(${PROJECT_NAME} app/slam_app.cpp ${COMMON_SRC})
+target_include_directories(${PROJECT_NAME} PRIVATE /usr/local/include/openni2)
 target_link_libraries(${PROJECT_NAME} Boost::program_options)
 target_link_libraries(${PROJECT_NAME} slam_core slam_gui)
 
-add_executable(lkt app/lkt_demo.cpp ${COMMON_SRC})
-target_link_libraries(lkt Boost::program_options)
-target_link_libraries(lkt slam_core slam_gui)
+# add_executable(lkt app/lkt_demo.cpp ${COMMON_SRC})
+# target_link_libraries(lkt Boost::program_options)
+# target_link_libraries(lkt slam_core slam_gui)
 

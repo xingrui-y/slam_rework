@@ -92,7 +92,7 @@ void DenseOdometry::DenseOdometryImpl::track_frame_keyframe_based(RgbdFramePtr c
     context_.use_initial_guess_ = true;
     context_.initial_estimate_ = current_keyframe_->get_pose().inverse() * last_frame_->get_pose();
     context_.intrinsics_pyr_ = intrinsics_pyr_;
-    context_.max_iterations_ = {10, 5, 3, 3, 3};
+    context_.max_iterations_ = {10, 0, 0, 0, 0};
 
     result_ = tracker_->compute_transform(reference_image_, current_image_, context_);
   }

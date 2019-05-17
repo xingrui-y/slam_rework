@@ -26,10 +26,10 @@ int main(int argc, char *argv[])
     {
         config_struct.width = 640;
         config_struct.height = 480;
-        config_struct.fx = 528.f;
-        config_struct.fy = 528.f;
-        config_struct.cx = 320.f;
-        config_struct.cy = 240.f;
+        config_struct.fx = 570.f;
+        config_struct.fy = 570.f;
+        config_struct.cx = 319.5f;
+        config_struct.cy = 239.5f;
         config_struct.pyramid_level = 5;
     }
 

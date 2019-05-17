@@ -1,11 +1,12 @@
 #include "openni_camera.h"
 #include <openni2/OpenNI.h>
+#include <openni2/PS1080.h>
 
 using namespace openni;
 
 class OpenNICamera::OpenNICameraImpl
 {
-  public:
+public:
     OpenNICameraImpl(int width, int height, int fps);
     void start_video_streaming();
     void stop_video_streaming();
@@ -59,6 +60,7 @@ OpenNICamera::OpenNICameraImpl::OpenNICameraImpl(int width, int height, int fps)
     depth_stream->setVideoMode(depth_video_mode);
     colour_stream->setVideoMode(colour_video_mode);
 
+    device->setDepthColorSyncEnabled(true);
     // Note: Doing image registration earlier than this point seems to fail
     if (device->isImageRegistrationModeSupported(IMAGE_REGISTRATION_DEPTH_TO_COLOR))
     {
@@ -77,6 +79,25 @@ OpenNICamera::OpenNICameraImpl::OpenNICameraImpl(int width, int height, int fps)
     }
 
     printf("OpenNI Camera Initialisation Complete!\n");
+
+    double pixelSize;
+    depth_stream->getProperty<double>(XN_STREAM_PROPERTY_ZERO_PLANE_PIXEL_SIZE, &pixelSize);
+
+    // pixel size @ VGA = pixel size @ SXGA x 2
+    pixelSize *= 2.0; // in mm
+
+    // focal length of IR camera in pixels for VGA resolution
+    int zeroPlaneDistance; // in mm
+    depth_stream->getProperty(XN_STREAM_PROPERTY_ZERO_PLANE_DISTANCE, &zeroPlaneDistance);
+
+    double baseline;
+    depth_stream->getProperty<double>(XN_STREAM_PROPERTY_EMITTER_DCMOS_DISTANCE, &baseline);
+    baseline *= 10.0;
+
+    // focal length from mm -> pixels (valid for 640x480)
+    double depthFocalLength_VGA = (int)(static_cast<double>(zeroPlaneDistance) / pixelSize);
+
+    std::cout << (float)depthFocalLength_VGA << std::endl;
 }
 
 void OpenNICamera::OpenNICameraImpl::start_video_streaming()

@@ -60,7 +60,7 @@ __global__ void check_visibility_flag_kernel(MapStruct map_struct, uchar *flag, 
             }
             else
             {
-                map_struct.delete_block(current);
+                // map_struct.delete_block(current);
                 flag[idx] = 0;
             }
 
@@ -235,14 +235,11 @@ __global__ void update_map_kernel(MapStruct map_struct, cv::cuda::PtrStepSz<floa
         int3 local_pos = make_int3(threadIdx.x, threadIdx.y, block_idx_z);
         float3 pt = inv_pose(map_struct.voxel_pos_to_world_pt(voxel_pos + local_pos));
 
-        float x = fx * pt.x / pt.z + cx;
-        float y = fy * pt.y / pt.z + cy;
-
-        if (x < 0 || y < 0 || x > depth.cols - 1 || y > depth.rows - 1)
+        int u = (int)(fx * pt.x / pt.z + cx);
+        int v = (int)(fy * pt.y / pt.z + cy);
+        if (u < 0 || v < 0 || u > depth.cols - 1 || v > depth.rows - 1)
             continue;
 
-        int u = __float2int_rd(x + 0.5);
-        int v = __float2int_rd(y + 0.5);
         float dist = depth.ptr(v)[u];
         if (isnan(dist) || dist > param.zmax_update_ || dist < param.zmin_update_)
             continue;
@@ -255,22 +252,20 @@ __global__ void update_map_kernel(MapStruct map_struct, cv::cuda::PtrStepSz<floa
         const int local_idx = map_struct.local_pos_to_local_idx(local_pos);
         Voxel &voxel = map_struct.voxels_[current.ptr_ + local_idx];
 
-        float sdf_p = voxel.get_sdf();
-        float weight_p = voxel.get_weight();
-        float3 z_pole = make_float3(0, 0, 1.f);
-        float weight_c = abs(z_pole * make_float3(nmap.ptr(v)[u])) / (dist * dist);
+        auto sdf_p = voxel.get_sdf();
+        int weight_p = voxel.get_weight();
 
-        if (weight_p < 1e-3)
+        if (weight_p == 0)
         {
             voxel.set_sdf(sdf);
-            voxel.set_weight(weight_c);
+            voxel.set_weight(1);
             continue;
         }
 
-        sdf_p = (sdf_p * weight_p + sdf * weight_c) / (weight_p + weight_c);
-        weight_p += weight_c;
+        unsigned char w_curr = min(255, weight_p + 1);
+        sdf_p = (sdf_p * weight_p + sdf) / (weight_p + 1);
         voxel.set_sdf(sdf_p);
-        voxel.set_weight(weight_p);
+        voxel.set_weight(w_curr);
     }
 }
 

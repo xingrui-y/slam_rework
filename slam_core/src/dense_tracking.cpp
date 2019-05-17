@@ -42,18 +42,49 @@ TrackingResult DenseTracking::DenseTrackingImpl::compute_transform(const RgbdIma
     cv::cuda::GpuMat intensity_dx = reference->get_intensity_dx(level);
     cv::cuda::GpuMat intensity_dy = reference->get_intensity_dy(level);
     IntrinsicMatrix K = c.intrinsics_pyr_->get_intrinsic_matrix_at(level);
+    float icp_error = std::numeric_limits<float>::max();
+    int count = 0;
 
     for (int iter = 0; iter < c.max_iterations_[level]; ++iter)
     {
       auto last_estimate = estimate.value();
+      auto last_icp_error = icp_error;
       icp_reduce(curr_vmap, curr_nmap, last_vmap, last_nmap, sum_se3_, out_se3_, last_estimate, K, jtj_icp_.data(), jtr_icp_.data(), residual_icp_.data());
-      rgb_reduce(curr_intensity, last_intensity, last_vmap, curr_vmap, intensity_dx, intensity_dy, sum_se3_, out_se3_, last_estimate, K, jtj_rgb_.data(), jtr_rgb_.data(), residual_rgb_.data());
-      JtJ_ = jtj_icp_ + 0.1 * jtj_rgb_;
-      Jtr_ = jtr_icp_ + 0.1 * jtr_rgb_;
+      // rgb_reduce(curr_intensity, last_intensity, last_vmap, curr_vmap, intensity_dx, intensity_dy, sum_se3_, out_se3_, last_estimate, K, jtj_rgb_.data(), jtr_rgb_.data(), residual_rgb_.data());
+      // JtJ_ = jtj_icp_ + 0.1 * jtj_rgb_;
+      // Jtr_ = jtr_icp_ + 0.1 * jtr_rgb_;
+      // JtJ_ = jtj_rgb_;
+      // Jtr_ = jtr_rgb_;
+      JtJ_ = jtj_icp_;
+      Jtr_ = jtr_icp_;
       update_ = JtJ_.cast<double>().ldlt().solve(Jtr_.cast<double>());
+
+      icp_error = sqrt(residual_icp_(0)) / residual_icp_(1);
+
+      if (icp_error > last_icp_error)
+      {
+        if (count >= 2)
+        {
+          estimate.revert();
+          break;
+        }
+
+        count++;
+        icp_error = last_icp_error;
+        // std::cout << "errro increases at " << level << "/" << iter << std::endl;
+      }
+      else
+      {
+        count = 0;
+      }
+
       estimate.update(Sophus::SE3d::exp(update_) * last_estimate);
     }
   }
+
+  Eigen::FullPivLU<Eigen::MatrixXf> lu(JtJ_);
+  Eigen::MatrixXf null_space = lu.kernel();
+  std::cout << null_space << std::endl;
 
   TrackingResult result;
   result.sucess = true;
