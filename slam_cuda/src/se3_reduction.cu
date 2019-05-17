@@ -58,17 +58,30 @@ struct RgbReduction
 {
     __device__ bool find_corresp(int &x, int &y)
     {
-        p_transformed = pose(make_float3(point_cloud.ptr(y)[x]));
+        float4 pt = last_vmap.ptr(y)[x];
+        if (pt.w < 0)
+            return false;
+
+        i_l = last_image.ptr(y)[x];
+        if (!isfinite(i_l))
+            return false;
+
+        p_transformed = pose(make_float3(pt));
         u0 = p_transformed.x / p_transformed.z * fx + cx;
         v0 = p_transformed.y / p_transformed.z * fy + cy;
-        if (u0 >= 0 && u0 < cols - 1 && v0 >= 0 && v0 < rows - 1)
+        if (u0 >= 2 && u0 < cols - 2 && v0 >= 2 && v0 < rows - 2)
         {
-            i_c = curr_image.ptr(y)[x];
-            i_l = interp2(last_image, u0, v0);
+            // int u = __float2int_rd(u0 + 0.5f);
+            // int v = __float2int_rd(v0 + 0.5f);
+            // i_c = curr_image.ptr(v)[u];
+            // dx = dIdx.ptr(v)[u];
+            // dy = dIdy.ptr(v)[u];
+
+            i_c = interp2(curr_image, u0, v0);
             dx = interp2(dIdx, u0, v0);
             dy = interp2(dIdy, u0, v0);
-            p_last = make_float3(last_vmap.ptr((int)(v0 + 0.5))[(int)(u0 + 0.5)]);
-            return !isnan(p_last.x) && i_c > 0 && i_l > 0 && dx != 0 && dy != 0 && isfinite(i_c) && isfinite(i_l) && isfinite(dx) && isfinite(dy);
+
+            return (dx > 0 || dy > 0) && isfinite(i_c) && isfinite(i_l) && isfinite(dx) && isfinite(dy);
         }
 
         return false;
@@ -81,6 +94,13 @@ struct RgbReduction
         return (image.ptr(v)[u] * (1 - coeff_x) + image.ptr(v)[u + 1] * coeff_x) * (1 - coeff_y) + (image.ptr(v + 1)[u] * (1 - coeff_x) + image.ptr(v + 1)[u + 1] * coeff_x) * coeff_y;
     }
 
+    // __device__ float3 bilinear_interpolate_depth(cv::cuda::PtrStepSz<float4> depth, float x, float y)
+    // {
+    //     int u = floor(x), v = floor(y);
+    //     float coeff_x = x - u, coeff_y = y - v;
+    //     return (image.ptr(v)[u] * (1 - coeff_x) + image.ptr(v)[u + 1] * coeff_x) * (1 - coeff_y) + (image.ptr(v + 1)[u] * (1 - coeff_x) + image.ptr(v + 1)[u + 1] * coeff_x) * coeff_y;
+    // }
+
     __device__ void compute_jacobian(int &k, float *sum)
     {
         int y = k / cols;
@@ -91,25 +111,25 @@ struct RgbReduction
 
         if (corresp_found)
         {
-            float3 left;
-            float z_inv = 1.0 / p_last.z;
-            left.x = dx * fx * z_inv;
-            left.y = dy * fy * z_inv;
-            left.z = -(left.x * p_last.x + left.y * p_last.y) * z_inv;
-            row[6] = i_c - i_l;
-
-            *(float3 *)&row[0] = left;
-            *(float3 *)&row[3] = cross(p_last, left);
-
             // float3 left;
-            // float z_inv = 1.0 / p_transformed.z;
+            // float z_inv = 1.0 / p_last.z;
             // left.x = dx * fx * z_inv;
             // left.y = dy * fy * z_inv;
-            // left.z = -(left.x * p_transformed.x + left.y * p_transformed.y) * z_inv;
+            // left.z = -(left.x * p_last.x + left.y * p_last.y) * z_inv;
             // row[6] = i_c - i_l;
 
             // *(float3 *)&row[0] = left;
-            // *(float3 *)&row[3] = cross(p_transformed, left);
+            // *(float3 *)&row[3] = cross(p_last, left);
+
+            float3 left;
+            float z_inv = 1.0 / p_transformed.z;
+            left.x = dx * fx * z_inv;
+            left.y = dy * fy * z_inv;
+            left.z = -(left.x * p_transformed.x + left.y * p_transformed.y) * z_inv;
+            row[6] = i_l - i_c;
+
+            *(float3 *)&row[0] = left;
+            *(float3 *)&row[3] = cross(p_transformed, left);
         }
 
         int count = 0;
@@ -159,6 +179,135 @@ struct RgbReduction
 private:
     float i_c, i_l, dx, dy;
 };
+
+// struct RgbReduction
+// {
+//     __device__ bool find_corresp(int &x, int &y)
+//     {
+//         p_transformed = pose(make_float3(point_cloud.ptr(y)[x]));
+//         u0 = p_transformed.x / p_transformed.z * fx + cx;
+//         v0 = p_transformed.y / p_transformed.z * fy + cy;
+//         if (u0 >= 0 && u0 < cols - 1 && v0 >= 0 && v0 < rows - 1)
+//         {
+//             i_c = curr_image.ptr(y)[x];
+//             i_l = interp2(last_image, u0, v0);
+//             dx = interp2(dIdx, u0, v0);
+//             dy = interp2(dIdy, u0, v0);
+//             p_last = make_float3(last_vmap.ptr((int)(v0 + 0.5))[(int)(u0 + 0.5)]);
+
+//             // int u1 = (int)(u0 + 0.5f);
+//             // int v1 = (int)(v0 + 0.5f);
+//             // if (u1 < 0 || v1 < 0 || u1 >= cols || v1 >= rows)
+//             //     return false;
+
+//             // i_c = curr_image.ptr(y)[x];
+//             // i_l = last_image.ptr(v1)[u1];
+//             // dx = dIdx.ptr(v1)[u1];
+//             // dy = dIdy.ptr(v1)[u1];
+//             // p_last = make_float3(last_vmap.ptr(v1)[u1]);
+
+//             // if (norm(p_transformed - p_last) > 0.03f)
+//             //     return false;
+
+//             // return !isnan(p_last.x) && i_c > 0 && i_l > 0 && dx != 0 && dy != 0 && isfinite(i_c) && isfinite(i_l) && isfinite(dx) && isfinite(dy);
+//             return !isnan(p_last.x) && (dx > 0 || dy > 0) && isfinite(i_c) && isfinite(i_l) && isfinite(dx) && isfinite(dy);
+//         }
+
+//         return false;
+//     }
+
+//     __device__ float interp2(cv::cuda::PtrStep<float> image, float &x, float &y)
+//     {
+//         int u = floor(x), v = floor(y);
+//         float coeff_x = x - u, coeff_y = y - v;
+//         return (image.ptr(v)[u] * (1 - coeff_x) + image.ptr(v)[u + 1] * coeff_x) * (1 - coeff_y) + (image.ptr(v + 1)[u] * (1 - coeff_x) + image.ptr(v + 1)[u + 1] * coeff_x) * coeff_y;
+//     }
+
+//     // __device__ float3 bilinear_interpolate_depth(cv::cuda::PtrStepSz<float4> depth, float x, float y)
+//     // {
+//     //     int u = floor(x), v = floor(y);
+//     //     float coeff_x = x - u, coeff_y = y - v;
+//     //     return (image.ptr(v)[u] * (1 - coeff_x) + image.ptr(v)[u + 1] * coeff_x) * (1 - coeff_y) + (image.ptr(v + 1)[u] * (1 - coeff_x) + image.ptr(v + 1)[u + 1] * coeff_x) * coeff_y;
+//     // }
+
+//     __device__ void compute_jacobian(int &k, float *sum)
+//     {
+//         int y = k / cols;
+//         int x = k - y * cols;
+
+//         bool corresp_found = find_corresp(x, y);
+//         float row[7] = {0, 0, 0, 0, 0, 0, 0};
+
+//         if (corresp_found)
+//         {
+//             float3 left;
+//             float z_inv = 1.0 / p_last.z;
+//             left.x = dx * fx * z_inv;
+//             left.y = dy * fy * z_inv;
+//             left.z = -(left.x * p_last.x + left.y * p_last.y) * z_inv;
+//             row[6] = i_c - i_l;
+
+//             *(float3 *)&row[0] = left;
+//             *(float3 *)&row[3] = cross(p_last, left);
+
+//             // float3 left;
+//             // float z_inv = 1.0 / p_transformed.z;
+//             // left.x = dx * fx * z_inv;
+//             // left.y = dy * fy * z_inv;
+//             // left.z = -(left.x * p_transformed.x + left.y * p_transformed.y) * z_inv;
+//             // row[6] = i_c - i_l;
+
+//             // *(float3 *)&row[0] = left;
+//             // *(float3 *)&row[3] = cross(p_transformed, left);
+//         }
+
+//         int count = 0;
+// #pragma unroll
+//         for (int i = 0; i < 7; ++i)
+// #pragma unroll
+//             for (int j = i; j < 7; ++j)
+//                 sum[count++] = row[i] * row[j];
+
+//         sum[count] = (float)corresp_found;
+//     }
+
+//     __device__ __forceinline__ void operator()()
+//     {
+//         float sum[29] = {0, 0, 0, 0, 0, 0, 0, 0,
+//                          0, 0, 0, 0, 0, 0, 0, 0,
+//                          0, 0, 0, 0, 0, 0, 0, 0,
+//                          0, 0, 0, 0, 0};
+
+//         float val[29];
+//         for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < N; i += blockDim.x * gridDim.x)
+//         {
+//             compute_jacobian(i, val);
+// #pragma unroll
+//             for (int j = 0; j < 29; ++j)
+//                 sum[j] += val[j];
+//         }
+
+//         BlockReduce<float, 29>(sum);
+
+//         if (threadIdx.x == 0)
+// #pragma unroll
+//             for (int i = 0; i < 29; ++i)
+//                 out.ptr(blockIdx.x)[i] = sum[i];
+//     }
+
+//     int cols, rows, N;
+//     float u0, v0;
+//     DeviceMatrix3x4 pose;
+//     float fx, fy, cx, cy, invfx, invfy;
+//     cv::cuda::PtrStep<float4> point_cloud, last_vmap;
+//     cv::cuda::PtrStep<float> last_image, curr_image;
+//     cv::cuda::PtrStep<float> dIdx, dIdy;
+//     cv::cuda::PtrStep<float> out;
+//     float3 p_transformed, p_last;
+
+// private:
+//     float i_c, i_l, dx, dy;
+// };
 
 __global__ void rgb_reduce_kernel(RgbReduction rr)
 {
@@ -359,107 +508,129 @@ void icp_reduce(const cv::cuda::GpuMat &curr_vmap,
     residual[1] = host_data.ptr<float>()[28];
 }
 
-__device__ float2 project(float3 pt, float fx, float fy, float cx, float cy)
+// TODO : Robust RGB Estimation
+
+class SelectCorrespRGB
 {
-    return make_float2(fx * pt.x / pt.z + cx, fy * pt.y / pt.z + cy);
-}
-
-__device__ float interp2(const cv::cuda::PtrStep<float> &map, float2 pt2d)
-{
-    int u = floor(pt2d.x), v = floor(pt2d.y);
-    float coeff_x = pt2d.x - u, coeff_y = pt2d.y - v;
-    return (map.ptr(v)[u] * (1 - coeff_x) + map.ptr(v)[u + 1] * coeff_x) * (1 - coeff_y) + (map.ptr(v + 1)[u] * (1 - coeff_x) + map.ptr(v + 1)[u + 1] * coeff_x) * coeff_y;
-}
-
-__device__ bool find_corresp(
-    const int &x, const int &y, float2 &pt2d,
-    const int &cols, const int &rows, float &residual,
-    float &fx, float &fy, float &cx, float &cy,
-    const DeviceMatrix3x4 &pose,
-    const cv::cuda::PtrStepSz<float> &curr_intensity,
-    const cv::cuda::PtrStep<float> &last_intensity,
-    const cv::cuda::PtrStep<float> &intensity_dx,
-    const cv::cuda::PtrStep<float> &intensity_dy,
-    const cv::cuda::PtrStep<float4> &curr_vmap)
-{
-    float3 pt = pose(make_float3(curr_vmap.ptr(y)[x]));
-    pt2d = project(pt, fx, fy, cx, cy);
-    if (pt2d.x < 0 || pt2d.y < 0 || pt2d.x > cols - 1 || pt2d.y > rows - 1)
-        return false;
-
-    float curr_val = curr_intensity.ptr(y)[x];
-    float last_val = interp2(last_intensity, pt2d);
-    float dx = interp2(intensity_dx, pt2d);
-    float dy = interp2(intensity_dy, pt2d);
-
-    return dx > 0 && dy > 0 && isfinite(curr_val) && isfinite(last_val);
-}
-
-__device__ bool find_corresp()
-{
-    return true;
-}
-
-__global__ void compute_residual_sum(
-    const cv::cuda::PtrStepSz<float> curr_intensity,
-    const cv::cuda::PtrStep<float> last_intensity,
-    const cv::cuda::PtrStep<float> intensity_dx,
-    const cv::cuda::PtrStep<float> intensity_dy,
-    const cv::cuda::PtrStep<float4> curr_vmap,
-    cv::cuda::PtrStep<float> residual_mat,
-    cv::cuda::PtrStep<float4> point_cloud,
-    cv::cuda::PtrStep<float4> corresp_mat,
-    const DeviceMatrix3x4 pose,
-    float fx, float fy, float cx, float cy)
-{
-    const int idx = threadIdx.x + blockDim.x * blockIdx.x;
-    const int cols = curr_intensity.cols;
-    const int rows = curr_intensity.rows;
-    if (idx >= cols * rows)
-        return;
-
-    float residual = 0;
-    float2 pt2d;
-    int y = idx / cols;
-    int x = cols * rows - y * cols;
-    bool corresp_found = find_corresp(x, y, pt2d, cols, rows, residual, fx, fy, cx, cy, pose, curr_intensity, last_intensity, intensity_dx, intensity_dy, curr_vmap);
-
-    uint offset; // compute offset
-
-    if (corresp_found)
+public:
+    __device__ inline bool find_correspondence(const int &x, const int &y, float &curr_val, float &last_val, float &dx, float &dy, float4 &pt) const
     {
-        corresp_mat.ptr(0)[offset] = make_float4(0);
-        residual_mat.ptr(0)[offset] = residual;
-        point_cloud.ptr(0)[offset] = make_float4(0);
+        if (x >= cols || y >= rows)
+            return false;
+
+        // reference point
+        pt = last_vmap.ptr(y)[x];
+        if (pt.w < 0)
+            return false;
+
+        // reference point in curr frame
+        pt = T_last_curr(pt);
+
+        // reference intensity
+        last_val = last_intensity.ptr(y)[x];
+
+        if (!isfinite(last_val))
+            return false;
+
+        int u = __float2int_rd(fx * pt.x / pt.z + cx + 0.5f);
+        int v = __float2int_rd(fy * pt.y / pt.z + cy + 0.5f);
+        if (u >= 0 && v >= 0 && u <= cols - 1 && v <= rows - 1)
+        {
+
+            // TODO : interpolation
+            curr_val = curr_intensity.ptr(v)[u];
+            dx = curr_intensity_dx.ptr(v)[u];
+            dy = curr_intensity_dy.ptr(v)[u];
+
+            // point selection criteria
+            // TODO : Optimise this
+            return (dx > 0 || dy > 0) && isfinite(curr_val);
+        }
     }
-}
 
-void compute_rgb_term(
-    const cv::cuda::GpuMat &curr_intensity,
-    const cv::cuda::GpuMat &last_intensity,
-    const cv::cuda::GpuMat &intensity_dx,
-    const cv::cuda::GpuMat &intensity_dy,
-    const cv::cuda::GpuMat &curr_vmap,
-    const Sophus::SE3d &pose,
-    const IntrinsicMatrix K)
+    __device__ __inline__ void operator()() const
+    {
+        for (int k = blockIdx.x * blockDim.x + threadIdx.x; k < N; k += blockDim.x * gridDim.x)
+        {
+            const int y = k / cols;
+            const int x = k - y * cols;
+
+            float4 pt;
+            float curr_val, last_val, dx, dy;
+            bool corresp_found = find_correspondence(x, y, curr_val, last_val, dx, dy, pt);
+
+            if (corresp_found)
+            {
+                uint index = atomicAdd(num_corresp, 1);
+                array_image[index] = make_float4(last_val, curr_val, dx, dy);
+                array_point[index] = pt;
+            }
+        }
+    }
+
+public:
+    cv::cuda::PtrStep<float4> last_vmap;
+    cv::cuda::PtrStep<float> last_intensity, curr_intensity;
+    cv::cuda::PtrStep<float> curr_intensity_dx, curr_intensity_dy;
+    float fx, fy, cx, cy;
+    DeviceMatrix3x4 T_last_curr;
+    int N, cols, rows;
+
+    uint *num_corresp;
+    float4 *array_image;
+    float4 *array_point;
+};
+
+class ComputeLeastSquaresRGB
 {
-    const int cols = curr_intensity.cols;
-    const int rows = curr_intensity.rows;
+    // public:
+    //     __device__ inline float compute_jacobian(const int &k, float *j) const
+    //     {
+    //         float row[7] = {0, 0, 0, 0, 0, 0, 0};
 
-    dim3 thread(8, 8);
-    dim3 block(div_up(cols, thread.x), div_up(rows, thread.y));
+    //         if (k < num_corresp)
+    //         {
+    //             float4 &image = array_image[k];
+    //             float4 &pt = array_point[k];
+    //         }
+    //     }
 
-    cv::cuda::GpuMat residual_mat(1, rows * cols, CV_32FC1);
-    cv::cuda::GpuMat corresp_mat(1, rows * cols, CV_32FC4);
+    //     __device__ __inline__ void operator()() const
+    //     {
+    //         float sum[29] = {0, 0, 0, 0, 0,
+    //                          0, 0, 0, 0, 0,
+    //                          0, 0, 0, 0, 0,
+    //                          0, 0, 0, 0, 0,
+    //                          0, 0, 0, 0, 0,
+    //                          0, 0, 0, 0};
 
-    cv::cuda::GpuMat corresp_roi = cv::cuda::GpuMat(corresp_mat, cv::Rect(0, 0, 0, 100));
-    cv::cuda::GpuMat residual_roi = cv::cuda::GpuMat(residual_mat, cv::Rect(0, 0, 0, 100));
+    //         float val[29];
+    //         for (int k = blockIdx.x * blockDim.x + threadIdx.x; k < N; k += blockDim.x * gridDim.x)
+    //         {
+    //             compute_jacobian(k, val);
+    // #pragma unroll
+    //             for (int i = 0; i < 29; ++i)
+    //                 sum[i] += val[i];
+    //         }
 
-    double min_val, max_val;
-    cv::cuda::minMax(residual_roi, &min_val, &max_val);
-    auto sum_residual = cv::cuda::sum(residual_roi);
-    auto mean = sum_residual / 100;
+    //         BlockReduce<float, 29>(sum);
 
-    safe_call(cudaDeviceSynchronize());
-    safe_call(cudaGetLastError());
+    //         if (threadIdx.x == 0)
+    //         {
+    // #pragma unroll
+    //             for (int i = 0; i < 29; ++i)
+    //                 out.ptr(blockIdx.x)[i] = sum[i];
+    //         }
+    //     }
+
+    cv::cuda::PtrSz<float4> array_image;
+    cv::cuda::PtrSz<float4> array_point;
+    uint num_corresp;
+    float mean_val;
+
+private:
+};
+
+__global__ void compute_stddev(float4 *image_val, uint num_corresp, float mean)
+{
 }

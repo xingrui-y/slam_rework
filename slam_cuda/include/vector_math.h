@@ -516,6 +516,16 @@ public:
         return result;
     }
 
+    __host__ __device__ float4 operator()(const float4 &pt) const
+    {
+        float4 result;
+        result.x = row_0.x * pt.x + row_0.y * pt.y + row_0.z * pt.z + row_0.w;
+        result.y = row_1.x * pt.x + row_1.y * pt.y + row_1.z * pt.z + row_1.w;
+        result.z = row_2.x * pt.x + row_2.y * pt.y + row_2.z * pt.z + row_2.w;
+        result.w = 1.0f;
+        return result;
+    }
+
     float4 row_0, row_1, row_2;
 };
 

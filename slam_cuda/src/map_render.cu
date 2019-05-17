@@ -488,8 +488,9 @@ struct MapRenderingDelegate
             step = sdf * param.raycast_step_scale();
             result += step * dir;
 
-            sdf = read_sdf_interped(result, valid_sdf);
-            if (valid_sdf && sdf < 0.05f && sdf > -0.05f)
+            // sdf = read_sdf_interped(result, valid_sdf);
+            // if (valid_sdf && sdf < 0.05f && sdf > -0.05f)
+            if (valid_sdf)
                 found_pt = true;
         }
 

@@ -206,12 +206,12 @@ void SlamSystem::SlamSystemImpl::update(const cv::Mat &image, const cv::Mat &dep
     cv::imshow("rendered image", img);
     cv::waitKey(1);
 
-    if (current_point_struct_ != nullptr)
-    {
-      current_point_struct_ = std::make_shared<KeyPointStruct>();
-      current_point_struct_->detect(current_frame_);
-      num_points_matched_ = reference_point_struct_->match(current_point_struct_, intrinsics_pyr_->get_intrinsic_matrix_at(0), true);
-    }
+    // if (current_point_struct_ != nullptr)
+    // {
+    //   current_point_struct_ = std::make_shared<KeyPointStruct>();
+    //   current_point_struct_->detect(current_frame_);
+    //   num_points_matched_ = reference_point_struct_->match(current_point_struct_, intrinsics_pyr_->get_intrinsic_matrix_at(0), true);
+    // }
   }
 
   if (keyframe_needed())

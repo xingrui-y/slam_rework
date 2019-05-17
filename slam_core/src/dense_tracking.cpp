@@ -39,24 +39,28 @@ TrackingResult DenseTracking::DenseTrackingImpl::compute_transform(const RgbdIma
     cv::cuda::GpuMat last_nmap = reference->get_nmap(level);
     cv::cuda::GpuMat curr_intensity = current->get_intensity(level);
     cv::cuda::GpuMat last_intensity = reference->get_intensity(level);
-    cv::cuda::GpuMat intensity_dx = reference->get_intensity_dx(level);
-    cv::cuda::GpuMat intensity_dy = reference->get_intensity_dy(level);
+    // cv::cuda::GpuMat intensity_dx = reference->get_intensity_dx(level);
+    // cv::cuda::GpuMat intensity_dy = reference->get_intensity_dy(level);
+    cv::cuda::GpuMat intensity_dx = current->get_intensity_dx(level);
+    cv::cuda::GpuMat intensity_dy = current->get_intensity_dy(level);
     IntrinsicMatrix K = c.intrinsics_pyr_->get_intrinsic_matrix_at(level);
     float icp_error = std::numeric_limits<float>::max();
+    float rgb_error = std::numeric_limits<float>::max();
     int count = 0;
 
     for (int iter = 0; iter < c.max_iterations_[level]; ++iter)
     {
       auto last_estimate = estimate.value();
       auto last_icp_error = icp_error;
-      icp_reduce(curr_vmap, curr_nmap, last_vmap, last_nmap, sum_se3_, out_se3_, last_estimate, K, jtj_icp_.data(), jtr_icp_.data(), residual_icp_.data());
-      // rgb_reduce(curr_intensity, last_intensity, last_vmap, curr_vmap, intensity_dx, intensity_dy, sum_se3_, out_se3_, last_estimate, K, jtj_rgb_.data(), jtr_rgb_.data(), residual_rgb_.data());
+      auto last_rgb_error = rgb_error;
+      // icp_reduce(curr_vmap, curr_nmap, last_vmap, last_nmap, sum_se3_, out_se3_, last_estimate, K, jtj_icp_.data(), jtr_icp_.data(), residual_icp_.data());
+      rgb_reduce(curr_intensity, last_intensity, last_vmap, curr_vmap, intensity_dx, intensity_dy, sum_se3_, out_se3_, last_estimate, K, jtj_rgb_.data(), jtr_rgb_.data(), residual_rgb_.data());
       // JtJ_ = jtj_icp_ + 0.0001 * jtj_rgb_;
       // Jtr_ = jtr_icp_ + 0.0001 * jtr_rgb_;
-      // JtJ_ = jtj_rgb_;
-      // Jtr_ = jtr_rgb_;
-      JtJ_ = jtj_icp_;
-      Jtr_ = jtr_icp_;
+      JtJ_ = jtj_rgb_;
+      Jtr_ = jtr_rgb_;
+      // JtJ_ = jtj_icp_;
+      // Jtr_ = jtr_icp_;
       update_ = JtJ_.cast<double>().ldlt().solve(Jtr_.cast<double>());
 
       icp_error = sqrt(residual_icp_(0)) / residual_icp_(1);
@@ -78,6 +82,25 @@ TrackingResult DenseTracking::DenseTrackingImpl::compute_transform(const RgbdIma
         count = 0;
       }
 
+      rgb_error = sqrt(residual_rgb_(0)) / residual_rgb_(1);
+
+      if (rgb_error > last_rgb_error)
+      {
+        if (count >= 2)
+        {
+          estimate.revert();
+          break;
+        }
+
+        count++;
+        rgb_error = last_rgb_error;
+        std::cout << "rgb errors increases at " << level << "/" << iter << " with error: " << rgb_error << " and num_matches: " << residual_rgb_(1) << " and update: " << update_.transpose() << std::endl;
+      }
+      else
+      {
+        count = 0;
+      }
+
       estimate.update(Sophus::SE3d::exp(update_) * last_estimate);
     }
   }
@@ -88,7 +111,7 @@ TrackingResult DenseTracking::DenseTrackingImpl::compute_transform(const RgbdIma
 
   TrackingResult result;
   result.sucess = true;
-  result.update = estimate.value();
+  result.update = estimate.value().inverse();
   return result;
 }
 
