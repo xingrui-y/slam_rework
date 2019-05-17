@@ -369,30 +369,29 @@ struct ICPReduction
 {
     __device__ __inline__ bool searchPoint(int &x, int &y, float3 &vcurr_g, float3 &vlast_g, float3 &nlast_g) const
     {
-
-        float3 vcurr_c = make_float3(curr_vmap_.ptr(y)[x]);
-        if (isnan(vcurr_c.x))
+        float3 vlast_c = make_float3(last_vmap_.ptr(y)[x]);
+        if (isnan(vlast_c.x))
             return false;
 
-        vcurr_g = pose(vcurr_c);
+        vlast_g = pose(vlast_c);
 
-        float invz = 1.0 / vcurr_g.z;
-        int u = (int)(vcurr_g.x * invz * fx + cx + 0.5);
-        int v = (int)(vcurr_g.y * invz * fy + cy + 0.5);
+        float invz = 1.0 / vlast_g.z;
+        int u = __float2int_rd(vlast_g.x * invz * fx + cx + 0.5);
+        int v = __float2int_rd(vlast_g.y * invz * fy + cy + 0.5);
         if (u < 0 || v < 0 || u >= cols || v >= rows)
             return false;
 
-        vlast_g = make_float3(last_vmap_.ptr(v)[u]);
+        vcurr_g = make_float3(curr_vmap_.ptr(v)[u]);
 
-        float3 ncurr_c = make_float3(curr_nmap_.ptr(y)[x]);
-        float3 ncurr_g = pose.rotate(ncurr_c);
+        float3 nlast_c = make_float3(last_nmap_.ptr(y)[x]);
+        nlast_g = pose.rotate(nlast_c);
 
-        nlast_g = make_float3(last_nmap_.ptr(v)[u]);
+        float3 ncurr_g = make_float3(curr_nmap_.ptr(v)[u]);
 
         float dist = norm(vlast_g - vcurr_g);
         float sine = norm(cross(ncurr_g, nlast_g));
 
-        return (sine < angleThresh && dist <= distThresh && !isnan(ncurr_c.x) && !isnan(nlast_g.x));
+        return (sine < angleThresh && dist <= distThresh && !isnan(ncurr_g.x) && !isnan(nlast_g.x));
     }
 
     __device__ __inline__ void getRow(int &i, float *sum) const
@@ -409,7 +408,7 @@ struct ICPReduction
         {
             *(float3 *)&row[0] = nlast;
             *(float3 *)&row[3] = cross(vlast, nlast);
-            row[6] = -nlast * (vcurr - vlast);
+            row[6] = nlast * (vcurr - vlast);
         }
 
         int count = 0;
@@ -461,6 +460,103 @@ struct ICPReduction
     float angleThresh, distThresh;
     mutable cv::cuda::PtrStepSz<float> out;
 };
+
+// struct ICPReduction
+// {
+//     __device__ __inline__ bool searchPoint(int &x, int &y, float3 &vcurr_g, float3 &vlast_g, float3 &nlast_g) const
+//     {
+
+//         float3 vcurr_c = make_float3(curr_vmap_.ptr(y)[x]);
+//         if (isnan(vcurr_c.x))
+//             return false;
+
+//         vcurr_g = pose(vcurr_c);
+
+//         float invz = 1.0 / vcurr_g.z;
+//         int u = (int)(vcurr_g.x * invz * fx + cx + 0.5);
+//         int v = (int)(vcurr_g.y * invz * fy + cy + 0.5);
+//         if (u < 0 || v < 0 || u >= cols || v >= rows)
+//             return false;
+
+//         vlast_g = make_float3(last_vmap_.ptr(v)[u]);
+
+//         float3 ncurr_c = make_float3(curr_nmap_.ptr(y)[x]);
+//         float3 ncurr_g = pose.rotate(ncurr_c);
+
+//         nlast_g = make_float3(last_nmap_.ptr(v)[u]);
+
+//         float dist = norm(vlast_g - vcurr_g);
+//         float sine = norm(cross(ncurr_g, nlast_g));
+
+//         return (sine < angleThresh && dist <= distThresh && !isnan(ncurr_c.x) && !isnan(nlast_g.x));
+//     }
+
+//     __device__ __inline__ void getRow(int &i, float *sum) const
+//     {
+//         int y = i / cols;
+//         int x = i - y * cols;
+
+//         bool found = false;
+//         float3 vcurr, vlast, nlast;
+//         found = searchPoint(x, y, vcurr, vlast, nlast);
+//         float row[7] = {0, 0, 0, 0, 0, 0, 0};
+
+//         if (found)
+//         {
+//             *(float3 *)&row[0] = nlast;
+//             *(float3 *)&row[3] = cross(vlast, nlast);
+//             row[6] = -nlast * (vcurr - vlast);
+//         }
+
+//         int count = 0;
+// #pragma unroll
+//         for (int i = 0; i < 7; ++i)
+//         {
+// #pragma unroll
+//             for (int j = i; j < 7; ++j)
+//                 sum[count++] = row[i] * row[j];
+//         }
+
+//         sum[count] = (float)found;
+//     }
+
+//     __device__ __inline__ void operator()() const
+//     {
+//         float sum[29] = {0, 0, 0, 0, 0,
+//                          0, 0, 0, 0, 0,
+//                          0, 0, 0, 0, 0,
+//                          0, 0, 0, 0, 0,
+//                          0, 0, 0, 0, 0,
+//                          0, 0, 0, 0};
+
+//         int i = blockIdx.x * blockDim.x + threadIdx.x;
+//         float val[29];
+//         for (; i < N; i += blockDim.x * gridDim.x)
+//         {
+//             getRow(i, val);
+// #pragma unroll
+//             for (int j = 0; j < 29; ++j)
+//                 sum[j] += val[j];
+//         }
+
+//         BlockReduce<float, 29>(sum);
+
+//         if (threadIdx.x == 0)
+//         {
+// #pragma unroll
+//             for (int i = 0; i < 29; ++i)
+//                 out.ptr(blockIdx.x)[i] = sum[i];
+//         }
+//     }
+
+//     DeviceMatrix3x4 pose;
+//     cv::cuda::PtrStep<float4> curr_vmap_, last_vmap_;
+//     cv::cuda::PtrStep<float4> curr_nmap_, last_nmap_;
+//     int cols, rows, N;
+//     float fx, fy, cx, cy;
+//     float angleThresh, distThresh;
+//     mutable cv::cuda::PtrStepSz<float> out;
+// };
 
 __global__ void icp_reduce_kernel(const ICPReduction icp)
 {

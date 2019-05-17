@@ -89,7 +89,7 @@ __global__ void back_project_kernel(const cv::cuda::PtrStepSz<float> depth, cv::
         return;
 
     float z = depth.ptr(y)[x];
-    z = (z == z) ? z : 0;
+    z = (z == z) ? z : nanf("NAN");
 
     vmap.ptr(y)[x] = make_float4(z * (x - intrinsics.cx) * intrinsics.invfx, z * (y - intrinsics.cy) * intrinsics.invfy, z, 1.0f);
 }
