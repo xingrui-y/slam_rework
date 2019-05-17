@@ -235,13 +235,13 @@ __global__ void update_map_kernel(MapStruct map_struct, cv::cuda::PtrStepSz<floa
         int3 local_pos = make_int3(threadIdx.x, threadIdx.y, block_idx_z);
         float3 pt = inv_pose(map_struct.voxel_pos_to_world_pt(voxel_pos + local_pos));
 
-        int u = (int)(fx * pt.x / pt.z + cx);
-        int v = (int)(fy * pt.y / pt.z + cy);
+        int u = __float2int_rd(fx * pt.x / pt.z + cx + 0.5);
+        int v = __float2int_rd(fy * pt.y / pt.z + cy + 0.5);
         if (u < 0 || v < 0 || u > depth.cols - 1 || v > depth.rows - 1)
             continue;
 
         float dist = depth.ptr(v)[u];
-        if (isnan(dist) || dist > param.zmax_update_ || dist < param.zmin_update_)
+        if (isnan(dist) || dist < 1e-2 || dist > param.zmax_update_ || dist < param.zmin_update_)
             continue;
 
         float sdf = dist - pt.z;

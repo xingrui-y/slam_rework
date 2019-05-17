@@ -51,8 +51,8 @@ TrackingResult DenseTracking::DenseTrackingImpl::compute_transform(const RgbdIma
       auto last_icp_error = icp_error;
       icp_reduce(curr_vmap, curr_nmap, last_vmap, last_nmap, sum_se3_, out_se3_, last_estimate, K, jtj_icp_.data(), jtr_icp_.data(), residual_icp_.data());
       // rgb_reduce(curr_intensity, last_intensity, last_vmap, curr_vmap, intensity_dx, intensity_dy, sum_se3_, out_se3_, last_estimate, K, jtj_rgb_.data(), jtr_rgb_.data(), residual_rgb_.data());
-      // JtJ_ = jtj_icp_ + 0.1 * jtj_rgb_;
-      // Jtr_ = jtr_icp_ + 0.1 * jtr_rgb_;
+      // JtJ_ = jtj_icp_ + 0.0001 * jtj_rgb_;
+      // Jtr_ = jtr_icp_ + 0.0001 * jtr_rgb_;
       // JtJ_ = jtj_rgb_;
       // Jtr_ = jtr_rgb_;
       JtJ_ = jtj_icp_;
@@ -82,9 +82,9 @@ TrackingResult DenseTracking::DenseTrackingImpl::compute_transform(const RgbdIma
     }
   }
 
-  Eigen::FullPivLU<Eigen::MatrixXf> lu(JtJ_);
-  Eigen::MatrixXf null_space = lu.kernel();
-  std::cout << null_space << std::endl;
+  // Eigen::FullPivLU<Eigen::MatrixXf> lu(JtJ_);
+  // Eigen::MatrixXf null_space = lu.kernel();
+  // std::cout << null_space << std::endl;
 
   TrackingResult result;
   result.sucess = true;

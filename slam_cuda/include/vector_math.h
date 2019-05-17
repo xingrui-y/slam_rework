@@ -48,7 +48,12 @@ __host__ __device__ __forceinline__ int3 make_int3(int a)
 
 __host__ __device__ __forceinline__ int3 make_int3(float3 a)
 {
-    return make_int3((int)a.x, (int)a.y, (int)a.z);
+    // return make_int3((int)a.x, (int)a.y, (int)a.z);
+    int3 b = make_int3((int)a.x, (int)a.y, (int)a.z);
+    b.x = b.x > a.x ? b.x - 1 : b.x;
+    b.y = b.y > a.y ? b.y - 1 : b.y;
+    b.z = b.z > a.z ? b.z - 1 : b.z;
+    return b;
 }
 
 __host__ __device__ __forceinline__ int4 make_int4(int3 a, int b)
@@ -483,7 +488,7 @@ __host__ __forceinline__ float3 make_float3(const Sophus::SE3d &pose)
 
 class DeviceMatrix3x4
 {
-  public:
+public:
     DeviceMatrix3x4() = default;
     DeviceMatrix3x4(const Sophus::SE3d &pose)
     {

@@ -37,6 +37,7 @@ DenseMapping::DenseMappingImpl::DenseMappingImpl(const IntrinsicMatrixPyramidPtr
   map_struct_->reset_map_struct();
 
   intrinsic_matrix_ = intrinsics_pyr->get_intrinsic_matrix_at(integration_level_);
+  std::cout << intrinsic_matrix_ << std::endl;
   zrange_x_.create(intrinsic_matrix_.height / 8, intrinsic_matrix_.width / 8, CV_32FC1);
   zrange_y_.create(intrinsic_matrix_.height / 8, intrinsic_matrix_.width / 8, CV_32FC1);
 }

@@ -423,7 +423,7 @@ __device__ int MapStruct::voxel_pos_to_local_idx(const int3 &pos) const
 
 __device__ float3 MapStruct::voxel_pos_to_world_pt(const int3 &voxel_pos) const
 {
-    return voxel_pos * param.voxel_size_ + 0.5 * param.voxel_size_;
+    return (voxel_pos)*param.voxel_size_;
 }
 
 __device__ int3 MapStruct::voxel_pos_to_block_pos(int3 voxel_pos) const

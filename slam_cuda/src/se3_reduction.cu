@@ -67,7 +67,8 @@ struct RgbReduction
             i_l = interp2(last_image, u0, v0);
             dx = interp2(dIdx, u0, v0);
             dy = interp2(dIdy, u0, v0);
-            return i_c > 0 && i_l > 0 && dx != 0 && dy != 0 && isfinite(i_c) && isfinite(i_l) && isfinite(dx) && isfinite(dy);
+            p_last = make_float3(last_vmap.ptr((int)(v0 + 0.5))[(int)(u0 + 0.5)]);
+            return !isnan(p_last.x) && i_c > 0 && i_l > 0 && dx != 0 && dy != 0 && isfinite(i_c) && isfinite(i_l) && isfinite(dx) && isfinite(dy);
         }
 
         return false;
@@ -91,14 +92,24 @@ struct RgbReduction
         if (corresp_found)
         {
             float3 left;
-            float z_inv = 1.0 / p_transformed.z;
+            float z_inv = 1.0 / p_last.z;
             left.x = dx * fx * z_inv;
             left.y = dy * fy * z_inv;
-            left.z = -(left.x * p_transformed.x + left.y * p_transformed.y) * z_inv;
+            left.z = -(left.x * p_last.x + left.y * p_last.y) * z_inv;
             row[6] = i_c - i_l;
 
             *(float3 *)&row[0] = left;
-            *(float3 *)&row[3] = cross(p_transformed, left);
+            *(float3 *)&row[3] = cross(p_last, left);
+
+            // float3 left;
+            // float z_inv = 1.0 / p_transformed.z;
+            // left.x = dx * fx * z_inv;
+            // left.y = dy * fy * z_inv;
+            // left.z = -(left.x * p_transformed.x + left.y * p_transformed.y) * z_inv;
+            // row[6] = i_c - i_l;
+
+            // *(float3 *)&row[0] = left;
+            // *(float3 *)&row[3] = cross(p_transformed, left);
         }
 
         int count = 0;
@@ -143,7 +154,7 @@ struct RgbReduction
     cv::cuda::PtrStep<float> last_image, curr_image;
     cv::cuda::PtrStep<float> dIdx, dIdy;
     cv::cuda::PtrStep<float> out;
-    float3 p_transformed;
+    float3 p_transformed, p_last;
 
 private:
     float i_c, i_l, dx, dy;
