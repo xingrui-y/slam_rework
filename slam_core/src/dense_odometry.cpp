@@ -100,6 +100,7 @@ void DenseOdometry::DenseOdometryImpl::track_frame_keyframe_based(RgbdFramePtr c
   {
     last_frame_ = current_frame;
     keyframe_needed_ = true;
+    current_image_.swap(reference_image_);
     return;
   }
 
@@ -125,6 +126,7 @@ DenseOdometry::DenseOdometry(const IntrinsicMatrixPyramidPtr intrinsics_pyr)
 void DenseOdometry::track_frame(RgbdFramePtr current_frame)
 {
   impl->track_frame(current_frame);
+  // impl->track_frame_keyframe_based(current_frame);
 }
 
 RgbdImagePtr DenseOdometry::get_current_image() const

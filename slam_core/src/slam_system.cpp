@@ -4,6 +4,7 @@
 #include "intrinsic_matrix.h"
 #include "bundle_adjuster.h"
 #include "point_struct.h"
+#include "image_ops.h"
 #include "stop_watch.h"
 #include "opencv_recorder.h"
 #include <memory>
@@ -33,6 +34,8 @@ public:
   RgbdFramePtr current_frame_;
   RgbdFramePtr current_keyframe_;
   RgbdFramePtr last_keyframe_;
+  RgbdFramePtr first_frame_;
+  cv::Mat first_image_;
   Sophus::SE3d initial_pose_;
   std::vector<Sophus::SE3d> frame_poses_;
   std::vector<RgbdFramePtr> keyframes_;
@@ -94,32 +97,32 @@ void SlamSystem::SlamSystemImpl::create_keyframe()
   current_keyframe_ = odometry_->get_current_keyframe();
   keyframes_.push_back(current_keyframe_);
 
-  if (last_keyframe_ == nullptr)
-  {
-    reference_point_struct_ = std::make_shared<KeyPointStruct>();
-    num_points_detected_ = reference_point_struct_->detect(current_keyframe_);
+  // if (last_keyframe_ == nullptr)
+  // {
+  //   reference_point_struct_ = std::make_shared<KeyPointStruct>();
+  //   num_points_detected_ = reference_point_struct_->detect(current_keyframe_);
 
-    if (num_points_detected_ == 0)
-      return;
+  //   if (num_points_detected_ == 0)
+  //     return;
 
-    reference_point_struct_->create_points(200, intrinsics_pyr_->get_intrinsic_matrix_at(0));
-  }
-  else
-  {
-    std::shared_ptr<KeyPointStruct> temp_point_struct = std::make_shared<KeyPointStruct>();
-    num_points_detected_ = temp_point_struct->detect(current_keyframe_);
+  //   reference_point_struct_->create_points(200, intrinsics_pyr_->get_intrinsic_matrix_at(0));
+  // }
+  // else
+  // {
+  //   std::shared_ptr<KeyPointStruct> temp_point_struct = std::make_shared<KeyPointStruct>();
+  //   num_points_detected_ = temp_point_struct->detect(current_keyframe_);
 
-    if (num_points_detected_ == 0)
-      return;
+  //   if (num_points_detected_ == 0)
+  //     return;
 
-    int num_matched = reference_point_struct_->match(temp_point_struct, intrinsics_pyr_->get_intrinsic_matrix_at(0), false);
-    reference_point_struct_ = temp_point_struct;
+  //   int num_matched = reference_point_struct_->match(temp_point_struct, intrinsics_pyr_->get_intrinsic_matrix_at(0), false);
+  //   reference_point_struct_ = temp_point_struct;
 
-    if (num_matched < 200)
-      reference_point_struct_->create_points(200, intrinsics_pyr_->get_intrinsic_matrix_at(0));
-  }
+  //   if (num_matched < 200)
+  //     reference_point_struct_->create_points(200, intrinsics_pyr_->get_intrinsic_matrix_at(0));
+  // }
 
-  key_struct_buffer_.push(reference_point_struct_);
+  // key_struct_buffer_.push(reference_point_struct_);
 }
 
 double compute_se3_to_se3_dist(const Sophus::SE3d pose_1, const Sophus::SE3d pose_2)
@@ -175,13 +178,19 @@ void SlamSystem::SlamSystemImpl::run_bundle_adjustment()
 void SlamSystem::SlamSystemImpl::update(const cv::Mat &image, const cv::Mat &depth_float, const size_t &id, const double &time_stamp)
 {
   current_frame_ = std::make_shared<RgbdFrame>(image, depth_float, id, time_stamp);
-
-  if (!system_initialised_)
+  std::cout << id << std::endl;
+  if (!system_initialised_ && id > 5)
   {
-    // current_frame_->set_pose(initial_pose_);
-    auto initpose = Sophus::SE3d(Sophus::SO3d(), Sophus::SE3d::Point(100, 100, 100));
+    current_frame_->set_pose(initial_pose_);
+    // auto initpose = Sophus::SE3d(Sophus::SO3d(), Sophus::SE3d::Point(100, 100, 100));
     vis->upload(current_frame_, intrinsics_pyr_);
+    first_frame_ = current_frame_;
+    first_image_ = image.clone();
     system_initialised_ = true;
+  }
+  else if (!system_initialised_)
+  {
+    return;
   }
 
   odometry_->track_frame(current_frame_);
@@ -204,6 +213,21 @@ void SlamSystem::SlamSystemImpl::update(const cv::Mat &image, const cv::Mat &dep
     cv::Mat img(rendered_image);
     cv::resize(img, img, cv::Size(0, 0), 2, 2);
     cv::imshow("rendered image", img);
+
+    auto vmap = reference_image->get_vmap(0);
+    cv::cuda::GpuMat dst_image;
+    cv::cuda::GpuMat src_image(first_image_);
+    auto pose = first_frame_->get_pose().inverse() * reference_image->get_reference_frame()->get_pose();
+    slam::cuda::warp_image(src_image, vmap, pose, intrinsics_pyr_->get_intrinsic_matrix_at(0), dst_image);
+    cv::Mat img2(dst_image);
+    cv::resize(img2, img2, cv::Size(0, 0), 2, 2);
+    cv::imshow("img2", img2);
+
+    // auto reference = reference_image->get_image();
+    // cv::Mat img2(reference);
+    // cv::resize(img2, img2, cv::Size(0, 0), 2, 2);
+    // cv::imshow("img2", img2);
+
     cv::waitKey(1);
 
     // if (current_point_struct_ != nullptr)

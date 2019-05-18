@@ -217,8 +217,11 @@ __global__ void create_blocks_kernel(MapStruct map_struct, cv::cuda::PtrStepSz<f
     }
 }
 
-__global__ void update_map_kernel(MapStruct map_struct, cv::cuda::PtrStepSz<float> depth, cv::cuda::PtrStep<uchar3> image,
-                                  cv::cuda::PtrStep<float4> nmap, DeviceMatrix3x4 inv_pose, float fx, float fy, float cx, float cy)
+__global__ void update_map_kernel(MapStruct map_struct,
+                                  cv::cuda::PtrStepSz<float> depth,
+                                  DeviceMatrix3x4 inv_pose,
+                                  float fx, float fy,
+                                  float cx, float cy)
 {
     if (blockIdx.x >= param.num_total_hash_entries_ || blockIdx.x >= *map_struct.visible_block_count_)
         return;
@@ -269,6 +272,76 @@ __global__ void update_map_kernel(MapStruct map_struct, cv::cuda::PtrStepSz<floa
     }
 }
 
+__global__ void update_map_with_colour_kernel(MapStruct map_struct,
+                                              cv::cuda::PtrStepSz<float> depth,
+                                              cv::cuda::PtrStepSz<uchar3> image,
+                                              DeviceMatrix3x4 inv_pose,
+                                              float fx, float fy,
+                                              float cx, float cy)
+{
+    if (blockIdx.x >= param.num_total_hash_entries_ || blockIdx.x >= *map_struct.visible_block_count_)
+        return;
+
+    HashEntry &current = map_struct.visible_block_pos_[blockIdx.x];
+
+    int3 voxel_pos = map_struct.block_pos_to_voxel_pos(current.pos_);
+    float dist_thresh = param.truncation_dist();
+    float inv_dist_thresh = 1.0 / dist_thresh;
+
+#pragma unroll
+    for (int block_idx_z = 0; block_idx_z < 8; ++block_idx_z)
+    {
+        int3 local_pos = make_int3(threadIdx.x, threadIdx.y, block_idx_z);
+        float3 pt = inv_pose(map_struct.voxel_pos_to_world_pt(voxel_pos + local_pos));
+
+        int u = __float2int_rd(fx * pt.x / pt.z + cx + 0.5);
+        int v = __float2int_rd(fy * pt.y / pt.z + cy + 0.5);
+        if (u < 0 || v < 0 || u > depth.cols - 1 || v > depth.rows - 1)
+            continue;
+
+        float dist = depth.ptr(v)[u];
+        if (isnan(dist) || dist < 1e-2 || dist > param.zmax_update_ || dist < param.zmin_update_)
+            continue;
+
+        float sdf = dist - pt.z;
+        if (sdf < -dist_thresh)
+            continue;
+
+        sdf = min(1.0f, sdf * inv_dist_thresh);
+        const int local_idx = map_struct.local_pos_to_local_idx(local_pos);
+        Voxel &voxel = map_struct.voxels_[current.ptr_ + local_idx];
+
+        auto sdf_p = voxel.get_sdf();
+        int weight_p = voxel.get_weight();
+
+        // update colour
+        auto colour_new = image.ptr(v)[u];
+        int colour_w_p = voxel.rgb_w_;
+        auto colour_p = voxel.rgb_;
+
+        if (weight_p == 0)
+        {
+            voxel.set_sdf(sdf);
+            voxel.set_weight(1);
+            // voxel.rgb_w_ = 1;
+            voxel.rgb_ = colour_new;
+            continue;
+        }
+
+        // fuse depth
+        unsigned char w_curr = min(255, weight_p + 1);
+        sdf_p = (sdf_p * weight_p + sdf) / (weight_p + 1);
+        voxel.set_sdf(sdf_p);
+        voxel.set_weight(w_curr);
+
+        // fuse colour
+        // unsigned char colour_w = min(255, colour_w_p + 1);
+        colour_p = make_uchar3((colour_p * (float)weight_p + colour_new * 1.0f) / ((float)weight_p + 1));
+        voxel.rgb_ = colour_p;
+        // voxel.rgb_w_ = colour_w;
+    }
+}
+
 void update(MapStruct map_struct,
             const cv::cuda::GpuMat depth,
             const cv::cuda::GpuMat image,
@@ -310,7 +383,8 @@ void update(MapStruct map_struct,
     thread = dim3(8, 8);
     block = dim3(visible_block_count);
 
-    update_map_kernel<<<block, thread>>>(map_struct, depth, image, normal, frame_pose.inverse(), K.fx, K.fy, K.cx, K.cy);
+    // update_map_kernel<<<block, thread>>>(map_struct, depth, frame_pose.inverse(), K.fx, K.fy, K.cx, K.cy);
+    update_map_with_colour_kernel<<<block, thread>>>(map_struct, depth, image, frame_pose.inverse(), K.fx, K.fy, K.cx, K.cy);
     safe_call(cudaDeviceSynchronize());
 }
 

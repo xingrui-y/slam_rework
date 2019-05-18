@@ -36,6 +36,15 @@ void raycast(MapStruct map_struct,
              const Sophus::SE3d &pose,
              const IntrinsicMatrix intrinsic_matrix);
 
+void raycast_with_colour(MapStruct map_struct,
+                         cv::cuda::GpuMat vmap,
+                         cv::cuda::GpuMat nmap,
+                         cv::cuda::GpuMat image,
+                         cv::cuda::GpuMat zrange_x,
+                         cv::cuda::GpuMat zrange_y,
+                         const Sophus::SE3d &pose,
+                         const IntrinsicMatrix intrinsic_matrix);
+
 } // namespace map
 } // namespace slam
 

@@ -54,14 +54,14 @@ TrackingResult DenseTracking::DenseTrackingImpl::compute_transform(const RgbdIma
       auto last_estimate = estimate.value();
       auto last_icp_error = icp_error;
       auto last_rgb_error = rgb_error;
-      // icp_reduce(curr_vmap, curr_nmap, last_vmap, last_nmap, sum_se3_, out_se3_, last_estimate, K, jtj_icp_.data(), jtr_icp_.data(), residual_icp_.data());
-      rgb_reduce(curr_intensity, last_intensity, last_vmap, curr_vmap, intensity_dx, intensity_dy, sum_se3_, out_se3_, last_estimate, K, jtj_rgb_.data(), jtr_rgb_.data(), residual_rgb_.data());
+      icp_reduce(curr_vmap, curr_nmap, last_vmap, last_nmap, sum_se3_, out_se3_, last_estimate, K, jtj_icp_.data(), jtr_icp_.data(), residual_icp_.data());
+      // rgb_reduce(curr_intensity, last_intensity, last_vmap, curr_vmap, intensity_dx, intensity_dy, sum_se3_, out_se3_, last_estimate, K, jtj_rgb_.data(), jtr_rgb_.data(), residual_rgb_.data());
       // JtJ_ = jtj_icp_ + 0.000001 * jtj_rgb_;
       // Jtr_ = jtr_icp_ + 0.000001 * jtr_rgb_;
-      JtJ_ = jtj_rgb_;
-      Jtr_ = jtr_rgb_;
-      // JtJ_ = jtj_icp_;
-      // Jtr_ = jtr_icp_;
+      // JtJ_ = jtj_rgb_;
+      // Jtr_ = jtr_rgb_;
+      JtJ_ = jtj_icp_;
+      Jtr_ = jtr_icp_;
       update_ = JtJ_.cast<double>().ldlt().solve(Jtr_.cast<double>());
 
       icp_error = sqrt(residual_icp_(0)) / residual_icp_(1);
@@ -109,6 +109,8 @@ TrackingResult DenseTracking::DenseTrackingImpl::compute_transform(const RgbdIma
   // Eigen::FullPivLU<Eigen::MatrixXf> lu(JtJ_);
   // Eigen::MatrixXf null_space = lu.kernel();
   // std::cout << null_space << std::endl;
+  if (estimate.value().log().transpose().norm() > 0.3)
+    std::cout << estimate.value().log().transpose().norm() << std::endl;
 
   TrackingResult result;
   result.sucess = true;

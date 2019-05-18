@@ -78,6 +78,11 @@ void build_intensity_derivative_pyramid(const std::vector<cv::cuda::GpuMat> &int
             sobel_y[level].create(rows, cols, CV_32FC1);
 
         compute_intensity_derivative_kernel<<<block, thread>>>(intensity[level], sobel_x[level], sobel_y[level]);
+
+        // cv::Ptr<cv::cuda::Filter> sobel_filter_x = cv::cuda::createSobelFilter(CV_32FC1, CV_32FC1, 1, 0, 3, 1.0 / 8);
+        // cv::Ptr<cv::cuda::Filter> sobel_filter_y = cv::cuda::createSobelFilter(CV_32FC1, CV_32FC1, 0, 1, 3, 1.0 / 8);
+        // sobel_filter_x->apply(intensity[level], sobel_x[level]);
+        // sobel_filter_y->apply(intensity[level], sobel_y[level]);
     }
 }
 
@@ -215,6 +220,11 @@ __global__ void image_rendering_phong_shading_kernel(const cv::cuda::PtrStep<flo
     dst.ptr(y)[x] = out;
 }
 
+dim3 create_grid(dim3 block, int cols, int rows)
+{
+    return dim3(div_up(cols, block.x), div_up(rows, block.y));
+}
+
 void image_rendering_phong_shading(const cv::cuda::GpuMat vmap, const cv::cuda::GpuMat nmap, cv::cuda::GpuMat &image)
 {
     dim3 thread(8, 4);
@@ -224,6 +234,92 @@ void image_rendering_phong_shading(const cv::cuda::GpuMat vmap, const cv::cuda::
         image.create(vmap.rows, vmap.cols, CV_8UC4);
 
     image_rendering_phong_shading_kernel<<<block, thread>>>(vmap, nmap, make_float3(5, 5, 5), image);
+}
+
+__global__ void convert_image_to_semi_dense_kernel(const cv::cuda::PtrStepSz<float> image,
+                                                   const cv::cuda::PtrStepSz<float> intensity_dx,
+                                                   const cv::cuda::PtrStepSz<float> intensity_dy,
+                                                   cv::cuda::PtrStepSz<float> semi,
+                                                   float th_dx, float th_dy)
+{
+    const int x = threadIdx.x + blockIdx.x * blockDim.x;
+    const int y = threadIdx.y + blockIdx.y * blockDim.y;
+    if (x >= image.cols || y >= image.rows)
+        return;
+
+    semi.ptr(y)[x] = 255;
+
+    auto dx = intensity_dx.ptr(y)[x];
+    auto dy = intensity_dy.ptr(y)[x];
+
+    if (dx > th_dx || dy > th_dy)
+    {
+        semi.ptr(y)[x] = image.ptr(y)[x];
+    }
+}
+
+void convert_image_to_semi_dense(const cv::cuda::GpuMat image, const cv::cuda::GpuMat dx, const cv::cuda::GpuMat dy, cv::cuda::GpuMat &semi, float th_dx, float th_dy)
+{
+    if (semi.empty())
+        semi.create(image.size(), image.type());
+
+    dim3 block(8, 4);
+    dim3 grid = create_grid(block, image.cols, image.rows);
+
+    convert_image_to_semi_dense_kernel<<<grid, block>>>(image, dx, dy, semi, th_dx, th_dy);
+}
+
+void build_semi_dense_pyramid(const std::vector<cv::cuda::GpuMat> image_pyr, const std::vector<cv::cuda::GpuMat> dx_pyr, const std::vector<cv::cuda::GpuMat> dy_pyr, std::vector<cv::cuda::GpuMat> &semi_pyr, float th_dx, float th_dy)
+{
+    if (semi_pyr.size() != image_pyr.size())
+        semi_pyr.resize(image_pyr.size());
+
+    for (int level = 0; level < image_pyr.size(); ++level)
+    {
+        convert_image_to_semi_dense(image_pyr[level], dx_pyr[level], dy_pyr[level], semi_pyr[level], th_dx, th_dy);
+    }
+}
+
+__device__ inline uchar3 interpolate_bilinear(const cv::cuda::PtrStepSz<uchar3> image, float x, float y)
+{
+    int u = floor(x), v = floor(y);
+    float coeff_x = x - (float)u, coeff_y = y - (float)v;
+    float3 result = (image.ptr(v)[u] * (1 - coeff_x) + image.ptr(v)[u + 1] * coeff_x) * (1 - coeff_y) +
+                    (image.ptr(v + 1)[u] * (1 - coeff_x) + image.ptr(v + 1)[u + 1] * coeff_x) * coeff_y;
+    return make_uchar3(result);
+}
+
+__global__ void warp_image_kernel(const cv::cuda::PtrStepSz<uchar3> src,
+                                  const cv::cuda::PtrStep<float4> vmap_dst,
+                                  const DeviceMatrix3x4 pose,
+                                  const DeviceIntrinsicMatrix K,
+                                  cv::cuda::PtrStep<uchar3> dst)
+{
+    const int x = threadIdx.x + blockIdx.x * blockDim.x;
+    const int y = threadIdx.y + blockIdx.y * blockDim.y;
+    if (x >= src.cols || y >= src.rows)
+        return;
+
+    dst.ptr(y)[x] = make_uchar3(0);
+    float3 dst_pt_src = pose(make_float3(vmap_dst.ptr(y)[x]));
+
+    float u = K.fx * dst_pt_src.x / dst_pt_src.z + K.cx;
+    float v = K.fy * dst_pt_src.y / dst_pt_src.z + K.cy;
+    if (u >= 1 && v >= 1 && u < src.cols - 1 && v < src.rows - 1)
+    {
+        dst.ptr(y)[x] = interpolate_bilinear(src, u, v);
+    }
+}
+
+void warp_image(const cv::cuda::GpuMat src, const cv::cuda::GpuMat vmap_dst, const Sophus::SE3d pose, const IntrinsicMatrix K, cv::cuda::GpuMat &dst)
+{
+    if (dst.empty())
+        dst.create(src.size(), src.type());
+
+    dim3 block(8, 4);
+    dim3 grid = create_grid(block, src.cols, src.rows);
+
+    warp_image_kernel<<<grid, block>>>(src, vmap_dst, pose, K, dst);
 }
 
 } // namespace cuda

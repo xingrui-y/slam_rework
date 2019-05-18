@@ -41,11 +41,25 @@ struct RenderingBlock
     float2 zrange;
 };
 
+// struct Voxel
+// {
+//     short sdf_;
+//     short weight_;
+//     uchar3 rgb_;
+
+//     __device__ Voxel();
+//     __device__ float get_sdf() const;
+//     __device__ unsigned char get_weight() const;
+//     __device__ void set_sdf(float val);
+//     __device__ void set_weight(unsigned char val);
+// };
+
 struct Voxel
 {
     short sdf_;
-    short weight_;
+    unsigned char weight_;
     uchar3 rgb_;
+    unsigned char rgb_w_;
 
     __device__ Voxel();
     __device__ float get_sdf() const;

@@ -284,9 +284,19 @@ __host__ __device__ __forceinline__ uchar3 operator*(uchar3 a, int b)
     return make_uchar3(a.x * b, a.y * b, a.z * b);
 }
 
+__host__ __device__ __forceinline__ float3 operator*(uchar3 a, float b)
+{
+    return make_float3(a.x * b, a.y * b, a.z * b);
+}
+
 __host__ __device__ __forceinline__ uchar3 operator*(int b, uchar3 a)
 {
     return make_uchar3(a.x * b, a.y * b, a.z * b);
+}
+
+__host__ __device__ __forceinline__ float3 operator*(float b, uchar3 a)
+{
+    return make_float3(a.x * b, a.y * b, a.z * b);
 }
 
 __host__ __device__ __forceinline__ int3 operator*(int3 a, unsigned int b)

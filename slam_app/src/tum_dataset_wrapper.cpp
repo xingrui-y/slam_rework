@@ -16,6 +16,7 @@ bool TUMDatasetWrapper::load_association_file(std::string file_name)
 
 	while (file >> ts >> name_image >> ts >> name_depth)
 	{
+		std::cout << name_image << std::endl;
 		image_list.push_back(name_image);
 		depth_list.push_back(name_depth);
 		time_stamp.push_back(ts);

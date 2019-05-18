@@ -59,7 +59,7 @@ struct RgbReduction
     __device__ bool find_corresp(int &x, int &y)
     {
         float4 pt = last_vmap.ptr(y)[x];
-        if (pt.w < 0)
+        if (pt.w < 0 || isnan(pt.x))
             return false;
 
         i_l = last_image.ptr(y)[x];
@@ -81,7 +81,7 @@ struct RgbReduction
             dx = interp2(dIdx, u0, v0);
             dy = interp2(dIdy, u0, v0);
 
-            return (dx > 0 || dy > 0) && isfinite(i_c) && isfinite(i_l) && isfinite(dx) && isfinite(dy);
+            return (dx > 1 || dy > 1) && isfinite(i_c) && isfinite(dx) && isfinite(dy);
         }
 
         return false;
@@ -91,7 +91,8 @@ struct RgbReduction
     {
         int u = floor(x), v = floor(y);
         float coeff_x = x - u, coeff_y = y - v;
-        return (image.ptr(v)[u] * (1 - coeff_x) + image.ptr(v)[u + 1] * coeff_x) * (1 - coeff_y) + (image.ptr(v + 1)[u] * (1 - coeff_x) + image.ptr(v + 1)[u + 1] * coeff_x) * coeff_y;
+        return (image.ptr(v)[u] * (1 - coeff_x) + image.ptr(v)[u + 1] * coeff_x) * (1 - coeff_y) +
+               (image.ptr(v + 1)[u] * (1 - coeff_x) + image.ptr(v + 1)[u + 1] * coeff_x) * coeff_y;
     }
 
     // __device__ float3 bilinear_interpolate_depth(cv::cuda::PtrStepSz<float4> depth, float x, float y)
@@ -630,7 +631,7 @@ public:
 
         int u = __float2int_rd(fx * pt.x / pt.z + cx + 0.5f);
         int v = __float2int_rd(fy * pt.y / pt.z + cy + 0.5f);
-        if (u >= 0 && v >= 0 && u <= cols - 1 && v <= rows - 1)
+        if (u >= 1 && v >= 1 && u <= cols - 2 && v <= rows - 2)
         {
 
             // TODO : interpolation

@@ -505,11 +505,163 @@ struct MapRenderingDelegate
             // }
         }
     }
+    __device__ __forceinline__ uchar3 read_colour(float3 pt3d, bool &valid)
+    {
+        Voxel *voxel = NULL;
+        map_struct.find_voxel(make_int3(pt3d), voxel);
+        if (voxel && voxel->get_weight() != 0)
+        {
+            valid = true;
+            return voxel->rgb_;
+        }
+        else
+        {
+            valid = false;
+            return make_uchar3(0);
+        }
+    }
+
+    __device__ __forceinline__ uchar3 read_colour_interpolated(float3 pt, bool &valid)
+    {
+        float3 xyz = pt - floor(pt);
+        uchar3 sdf[2];
+        float3 result[4];
+        bool valid_pt;
+
+        sdf[0] = read_colour(pt, valid_pt);
+        sdf[1] = read_colour(pt + make_float3(1, 0, 0), valid);
+        valid_pt &= valid;
+        result[0] = (1.0f - xyz.x) * sdf[0] + xyz.x * sdf[1];
+
+        sdf[0] = read_colour(pt + make_float3(0, 1, 0), valid);
+        valid_pt &= valid;
+        sdf[1] = read_colour(pt + make_float3(1, 1, 0), valid);
+        valid_pt &= valid;
+        result[1] = (1.0f - xyz.x) * sdf[0] + xyz.x * sdf[1];
+        result[2] = (1.0f - xyz.y) * result[0] + xyz.y * result[1];
+
+        sdf[0] = read_colour(pt + make_float3(0, 0, 1), valid);
+        valid_pt &= valid;
+        sdf[1] = read_colour(pt + make_float3(1, 0, 1), valid);
+        valid_pt &= valid;
+        result[0] = (1.0f - xyz.x) * sdf[0] + xyz.x * sdf[1];
+
+        sdf[0] = read_colour(pt + make_float3(0, 1, 1), valid);
+        valid_pt &= valid;
+        sdf[1] = read_colour(pt + make_float3(1, 1, 1), valid);
+        valid_pt &= valid;
+        result[1] = (1.0f - xyz.x) * sdf[0] + xyz.x * sdf[1];
+        result[3] = (1.0f - xyz.y) * result[0] + xyz.y * result[1];
+        valid = valid_pt;
+        return make_uchar3((1.0f - xyz.z) * result[2] + xyz.z * result[3]);
+    }
+    cv::cuda::PtrStep<uchar3> image;
+    __device__ __forceinline__ void raycast_with_colour()
+    {
+        const int x = threadIdx.x + blockDim.x * blockIdx.x;
+        const int y = threadIdx.y + blockDim.y * blockIdx.y;
+        if (x >= width || y >= height)
+            return;
+
+        vmap.ptr(y)[x] = make_float4(__int_as_float(0x7fffffff));
+        image.ptr(y)[x] = make_uchar3(255);
+        // nmap.ptr(y)[x] = make_float4(__int_as_float(0x7fffffff));
+
+        // int2 local_id;
+        // local_id.x = __float2int_rd((float)x / 8);
+        // local_id.y = __float2int_rd((float)y / 8);
+
+        // float2 zrange;
+        // zrange.x = zrange_x.ptr(local_id.y)[local_id.x];
+        // zrange.y = zrange_y.ptr(local_id.y)[local_id.x];
+        // if (zrange.y < 1e-3 || zrange.x < 1e-3 || isnan(zrange.x) || isnan(zrange.y))
+        //     return;
+
+        float sdf = 1.0f;
+        float last_sdf;
+
+        float3 pt = unproject(x, y, 0.3);
+        float dist_s = norm(pt) * param.inverse_voxel_size();
+        float3 block_s = pose(pt) * param.inverse_voxel_size();
+
+        pt = unproject(x, y, 1.5);
+        float dist_e = norm(pt) * param.inverse_voxel_size();
+        float3 block_e = pose(pt) * param.inverse_voxel_size();
+
+        float3 dir = normalised(block_e - block_s);
+        float3 result = block_s;
+
+        bool valid_sdf = false;
+        bool found_pt = false;
+        float step;
+
+        while (dist_s < dist_e)
+        {
+            last_sdf = sdf;
+            sdf = read_sdf(result, valid_sdf);
+
+            if (sdf <= 0.5f && sdf >= -0.5f)
+                sdf = read_sdf_interped(result, valid_sdf);
+
+            if (sdf <= 0.0f)
+                break;
+
+            if (sdf >= 0.f && last_sdf < 0.f)
+                return;
+
+            if (valid_sdf)
+                step = max(sdf * param.raycast_step_scale(), 1.0f);
+            else
+                step = 2;
+
+            result += step * dir;
+            dist_s += step;
+        }
+
+        if (sdf <= 0.0f)
+        {
+            step = sdf * param.raycast_step_scale();
+            result += step * dir;
+
+            sdf = read_sdf_interped(result, valid_sdf);
+
+            step = sdf * param.raycast_step_scale();
+            result += step * dir;
+
+            // sdf = read_sdf_interped(result, valid_sdf);
+            // if (valid_sdf && sdf < 0.05f && sdf > -0.05f)
+            if (valid_sdf)
+                found_pt = true;
+        }
+
+        if (found_pt)
+        {
+            // float3 normal;
+            // if (read_normal_approximate(result, normal))
+            // {
+
+            // auto rgb = read_colour_interpolated(result, valid_sdf);
+            auto rgb = read_colour(result, valid_sdf);
+            if (!valid_sdf)
+                return;
+
+            result = inv_pose(result * param.voxel_size_);
+            vmap.ptr(y)[x] = make_float4(result, 1.0);
+            image.ptr(y)[x] = rgb;
+            //     nmap.ptr(y)[x] = make_float4(normal, 1.0);
+            // }
+        }
+    }
 };
 
 __global__ void __launch_bounds__(32, 16) raycast_kernel(MapRenderingDelegate delegate)
 {
     delegate();
+}
+
+__global__ void __launch_bounds__(32, 16) raycast_with_colour_kernel(MapRenderingDelegate delegate)
+{
+    delegate.raycast_with_colour();
 }
 
 void raycast(MapStruct map_struct,
@@ -543,6 +695,41 @@ void raycast(MapStruct map_struct,
     dim3 block(div_up(cols, thread.x), div_up(rows, thread.y));
 
     raycast_kernel<<<block, thread>>>(delegate);
+}
+
+void raycast_with_colour(MapStruct map_struct,
+                         cv::cuda::GpuMat vmap,
+                         cv::cuda::GpuMat nmap,
+                         cv::cuda::GpuMat image,
+                         cv::cuda::GpuMat zrange_x,
+                         cv::cuda::GpuMat zrange_y,
+                         const Sophus::SE3d &pose,
+                         const IntrinsicMatrix intrinsic_matrix)
+{
+    const int cols = vmap.cols;
+    const int rows = vmap.rows;
+
+    MapRenderingDelegate delegate;
+
+    delegate.width = cols;
+    delegate.height = rows;
+    delegate.map_struct = map_struct;
+    delegate.vmap = vmap;
+    delegate.nmap = nmap;
+    delegate.image = image;
+    delegate.zrange_x = zrange_x;
+    delegate.zrange_y = zrange_y;
+    delegate.invfx = intrinsic_matrix.invfx;
+    delegate.invfy = intrinsic_matrix.invfy;
+    delegate.cx = intrinsic_matrix.cx;
+    delegate.cy = intrinsic_matrix.cy;
+    delegate.pose = pose;
+    delegate.inv_pose = pose.inverse();
+
+    dim3 thread(4, 8);
+    dim3 block(div_up(cols, thread.x), div_up(rows, thread.y));
+
+    raycast_with_colour_kernel<<<block, thread>>>(delegate);
 }
 
 } // namespace map

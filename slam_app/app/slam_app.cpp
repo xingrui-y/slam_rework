@@ -36,6 +36,7 @@ int main(int argc, char *argv[])
     if (po.use_dataset)
     {
         TUMDatasetWrapper tum(po.dataset_path);
+        std::cout << po.dataset_path << std::endl;
         tum.load_association_file("association.txt");
         tum.load_ground_truth("groundtruth.txt");
         slam = std::make_shared<SlamLocalMapping>(&tum, config_struct);

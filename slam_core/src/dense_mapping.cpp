@@ -18,6 +18,7 @@ public:
   // for raycast
   cv::cuda::GpuMat cast_vmap_;
   cv::cuda::GpuMat cast_nmap_;
+  cv::cuda::GpuMat cast_image_;
   cv::cuda::GpuMat zrange_x_;
   cv::cuda::GpuMat zrange_y_;
 
@@ -37,7 +38,6 @@ DenseMapping::DenseMappingImpl::DenseMappingImpl(const IntrinsicMatrixPyramidPtr
   map_struct_->reset_map_struct();
 
   intrinsic_matrix_ = intrinsics_pyr->get_intrinsic_matrix_at(integration_level_);
-  std::cout << intrinsic_matrix_ << std::endl;
   zrange_x_.create(intrinsic_matrix_.height / 8, intrinsic_matrix_.width / 8, CV_32FC1);
   zrange_y_.create(intrinsic_matrix_.height / 8, intrinsic_matrix_.width / 8, CV_32FC1);
 }
@@ -79,7 +79,8 @@ void DenseMapping::DenseMappingImpl::raycast(RgbdImagePtr current_image)
   // {
   cast_vmap_ = current_image->get_vmap(integration_level_);
   cast_nmap_ = current_image->get_nmap(integration_level_);
-  slam::map::raycast(*map_struct_, cast_vmap_, cast_nmap_, zrange_x_, zrange_y_, pose, intrinsic_matrix_);
+  cast_image_ = current_image->get_image();
+  slam::map::raycast_with_colour(*map_struct_, cast_vmap_, cast_nmap_, cast_image_, zrange_x_, zrange_y_, pose, intrinsic_matrix_);
   // }
 }
 

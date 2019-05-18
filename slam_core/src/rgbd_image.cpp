@@ -26,6 +26,7 @@ public:
     std::vector<cv::cuda::GpuMat> intensity_dy_;
     std::vector<cv::cuda::GpuMat> point_cloud_;
     std::vector<cv::cuda::GpuMat> normal_;
+    std::vector<cv::cuda::GpuMat> semi_dense_;
 };
 
 RgbdImage::RgbdImageImpl::RgbdImageImpl()
@@ -109,6 +110,15 @@ void RgbdImage::RgbdImageImpl::upload(const RgbdFramePtr frame, const IntrinsicM
     slam::cuda::build_intensity_derivative_pyramid(intensity_, intensity_dx_, intensity_dy_);
     slam::cuda::build_point_cloud_pyramid(depth_, point_cloud_, intrinsics_pyr);
     slam::cuda::build_normal_pyramid(point_cloud_, normal_);
+    // slam::cuda::build_semi_dense_pyramid(intensity_, intensity_dx_, intensity_dy_, semi_dense_, 1, 1);
+
+    // for (int i = 0; i < 5; ++i)
+    // {
+    //     cv::Mat img(semi_dense_[i]);
+    //     img.convertTo(img, CV_8UC1);
+    //     cv::imshow("semi", img);
+    //     cv::waitKey(0);
+    // }
 
     reference_frame_ = frame;
 }
@@ -131,6 +141,11 @@ void RgbdImage::resize_device_map()
     slam::cuda::resize_device_map(impl->point_cloud_);
     // slam::cuda::resize_device_map(impl->normal_);
     slam::cuda::build_normal_pyramid(impl->point_cloud_, impl->normal_);
+
+    // impl->image_.convertTo(impl->image_float_, CV_32FC3);
+    // cv::cuda::cvtColor(impl->image_float_, impl->intensity_float_, CV_RGB2GRAY);
+    // slam::cuda::build_intensity_pyramid(impl->intensity_float_, impl->intensity_, 5);
+    // slam::cuda::build_intensity_derivative_pyramid(impl->intensity_, impl->intensity_dx_, impl->intensity_dy_);
 }
 
 cv::cuda::GpuMat RgbdImage::get_depth(const int &level) const
