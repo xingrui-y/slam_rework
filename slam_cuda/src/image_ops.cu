@@ -236,6 +236,70 @@ void image_rendering_phong_shading(const cv::cuda::GpuMat vmap, const cv::cuda::
     image_rendering_phong_shading_kernel<<<block, thread>>>(vmap, nmap, make_float3(5, 5, 5), image);
 }
 
+__global__ void render_scene_textured_kernel(const cv::cuda::PtrStep<float4> vmap,
+                                             const cv::cuda::PtrStep<float4> nmap,
+                                             const cv::cuda::PtrStep<uchar3> image,
+                                             const float3 light_pos,
+                                             cv::cuda::PtrStepSz<uchar4> dst)
+{
+    const int x = threadIdx.x + blockIdx.x * blockDim.x;
+    const int y = threadIdx.y + blockIdx.y * blockDim.y;
+    if (x >= dst.cols || y >= dst.rows)
+        return;
+
+    float3 color;
+    float3 point = make_float3(vmap.ptr(y)[x]);
+    float3 pixel = make_float3(image.ptr(y)[x]) / 255.f;
+    if (isnan(point.x))
+    {
+        const float3 bgr1 = make_float3(4.f / 255.f, 2.f / 255.f, 2.f / 255.f);
+        const float3 bgr2 = make_float3(236.f / 255.f, 120.f / 255.f, 120.f / 255.f);
+
+        float w = static_cast<float>(y) / dst.rows;
+        color = bgr1 * (1 - w) + bgr2 * w;
+    }
+    else
+    {
+        float3 P = point;
+        float3 N = make_float3(nmap.ptr(y)[x]);
+
+        const float Ka = 0.3f; //ambient coeff
+        const float Kd = 0.5f; //diffuse coeff
+        const float Ks = 0.2f; //specular coeff
+        const float n = 20.f;  //specular power
+
+        const float Ax = pixel.x;
+        const float Dx = pixel.y;
+        const float Sx = pixel.z;
+        const float Lx = 2.f; //light color
+
+        float3 L = normalised(light_pos - P);
+        float3 V = normalised(make_float3(0.f, 0.f, 0.f) - P);
+        float3 R = normalised(2 * N * (N * L) - L);
+
+        float Ix = Ax * Ka * Dx + Lx * Kd * Dx * fmax(0.f, (N * L)) + Lx * Ks * Sx * pow(fmax(0.f, (R * V)), n);
+        color = make_float3(Ix, Ix, Ix);
+    }
+
+    uchar4 out;
+    out.x = static_cast<unsigned char>(__saturatef(color.x) * 255.f);
+    out.y = static_cast<unsigned char>(__saturatef(color.y) * 255.f);
+    out.z = static_cast<unsigned char>(__saturatef(color.z) * 255.f);
+    out.w = 255.0;
+    dst.ptr(y)[x] = out;
+}
+
+void render_scene_textured(const cv::cuda::GpuMat vmap, const cv::cuda::GpuMat nmap, const cv::cuda::GpuMat image, cv::cuda::GpuMat &out)
+{
+    dim3 thread(8, 4);
+    dim3 block(div_up(vmap.cols, thread.x), div_up(vmap.rows, thread.y));
+
+    if (out.empty())
+        out.create(vmap.rows, vmap.cols, CV_8UC4);
+
+    render_scene_textured_kernel<<<block, thread>>>(vmap, nmap, image, make_float3(5, 5, 5), out);
+}
+
 __global__ void convert_image_to_semi_dense_kernel(const cv::cuda::PtrStepSz<float> image,
                                                    const cv::cuda::PtrStepSz<float> intensity_dx,
                                                    const cv::cuda::PtrStepSz<float> intensity_dy,

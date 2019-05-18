@@ -56,8 +56,11 @@ TrackingResult DenseTracking::DenseTrackingImpl::compute_transform(const RgbdIma
       auto last_rgb_error = rgb_error;
       icp_reduce(curr_vmap, curr_nmap, last_vmap, last_nmap, sum_se3_, out_se3_, last_estimate, K, jtj_icp_.data(), jtr_icp_.data(), residual_icp_.data());
       // rgb_reduce(curr_intensity, last_intensity, last_vmap, curr_vmap, intensity_dx, intensity_dy, sum_se3_, out_se3_, last_estimate, K, jtj_rgb_.data(), jtr_rgb_.data(), residual_rgb_.data());
-      // JtJ_ = jtj_icp_ + 0.000001 * jtj_rgb_;
-      // Jtr_ = jtr_icp_ + 0.000001 * jtr_rgb_;
+      // JtJ_ = 1e6 * jtj_icp_ + jtj_rgb_;
+      // Jtr_ = 1e6 * jtr_icp_ + jtr_rgb_;
+
+      // std::cout << jtj_icp_ << std::endl;
+      // std::cout << jtj_rgb_ << std::endl;
       // JtJ_ = jtj_rgb_;
       // Jtr_ = jtr_rgb_;
       JtJ_ = jtj_icp_;

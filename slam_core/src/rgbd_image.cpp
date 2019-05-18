@@ -69,6 +69,12 @@ cv::cuda::GpuMat RgbdImage::get_rendered_image() const
     return impl->rendered_image_;
 }
 
+cv::cuda::GpuMat RgbdImage::get_rendered_scene_textured() const
+{
+    slam::cuda::render_scene_textured(impl->point_cloud_[0], impl->normal_[0], impl->image_, impl->rendered_image_);
+    return impl->rendered_image_;
+}
+
 cv::cuda::GpuMat RgbdImage::get_intensity(const int &level) const
 {
     return impl->intensity_[level];

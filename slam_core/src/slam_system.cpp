@@ -174,11 +174,10 @@ void SlamSystem::SlamSystemImpl::run_bundle_adjustment()
   bundler_->set_up_bundler(key_struct_list_);
   bundler_->run_bundle_adjustment(intrinsics_pyr_->get_intrinsic_matrix_at(0));
 }
-
+// slam::util::CVRecorder recorder(1280, 960, 30);
 void SlamSystem::SlamSystemImpl::update(const cv::Mat &image, const cv::Mat &depth_float, const size_t &id, const double &time_stamp)
 {
   current_frame_ = std::make_shared<RgbdFrame>(image, depth_float, id, time_stamp);
-  std::cout << id << std::endl;
   if (!system_initialised_ && id > 5)
   {
     current_frame_->set_pose(initial_pose_);
@@ -202,7 +201,9 @@ void SlamSystem::SlamSystemImpl::update(const cv::Mat &image, const cv::Mat &dep
     mapping_->update(reference_image);
     mapping_->raycast(reference_image);
     reference_image->resize_device_map();
-    cv::cuda::GpuMat rendered_image = reference_image->get_rendered_image();
+    // cv::cuda::GpuMat rendered_image = reference_image->get_rendered_image();
+
+    cv::cuda::GpuMat rendered_image = reference_image->get_rendered_scene_textured();
 
     // vis->upload(reference_image->get_reference_frame(), intrinsics_pyr_);
     // mapping_->raycast(vis);
@@ -214,19 +215,35 @@ void SlamSystem::SlamSystemImpl::update(const cv::Mat &image, const cv::Mat &dep
     cv::resize(img, img, cv::Size(0, 0), 2, 2);
     cv::imshow("rendered image", img);
 
-    auto vmap = reference_image->get_vmap(0);
-    cv::cuda::GpuMat dst_image;
-    cv::cuda::GpuMat src_image(first_image_);
-    auto pose = first_frame_->get_pose().inverse() * reference_image->get_reference_frame()->get_pose();
-    slam::cuda::warp_image(src_image, vmap, pose, intrinsics_pyr_->get_intrinsic_matrix_at(0), dst_image);
-    cv::Mat img2(dst_image);
-    cv::resize(img2, img2, cv::Size(0, 0), 2, 2);
-    cv::imshow("img2", img2);
+    // auto vmap = reference_image->get_vmap(0);
+    // cv::cuda::GpuMat dst_image;
+    // cv::cuda::GpuMat src_image(first_image_);
+    // auto pose = first_frame_->get_pose().inverse() * reference_image->get_reference_frame()->get_pose();
+    // slam::cuda::warp_image(src_image, vmap, pose, intrinsics_pyr_->get_intrinsic_matrix_at(0), dst_image);
+    // cv::cuda::GpuMat intensity;
+    // cv::cuda::cvtColor(dst_image, intensity, cv::COLOR_RGB2BGR);
 
+    // cv::Mat dx;
+    cv::Mat img2(reference_image->get_image());
+    cv::Mat intensity1;
+    cv::cvtColor(img2, intensity1, cv::COLOR_RGB2GRAY);
+
+    // cv::Sobel(img2, dx, CV_8UC1, 1, 0);
+    cv::resize(intensity1, intensity1, cv::Size(0, 0), 2, 2);
+    cv::imshow("img2", intensity1);
+
+    // cv::cvtColor(img, img, cv::COLOR_RGBA2BGR);
+    // recorder.add_frame(img);
     // auto reference = reference_image->get_image();
     // cv::Mat img2(reference);
     // cv::resize(img2, img2, cv::Size(0, 0), 2, 2);
     // cv::imshow("img2", img2);
+
+    cv::Mat img3(current_frame_->get_image());
+    cv::Mat intensity2;
+    cv::cvtColor(img3, intensity2, cv::COLOR_RGB2GRAY);
+    cv::resize(intensity2, intensity2, cv::Size(0, 0), 2, 2);
+    cv::imshow("img3", intensity2);
 
     cv::waitKey(1);
 

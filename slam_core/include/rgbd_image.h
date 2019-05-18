@@ -25,6 +25,7 @@ public:
 
   RgbdFramePtr get_reference_frame() const;
   cv::cuda::GpuMat get_rendered_image() const;
+  cv::cuda::GpuMat get_rendered_scene_textured() const;
   cv::cuda::GpuMat get_depth(const int &level = 0) const;
   cv::cuda::GpuMat get_raw_depth() const;
   cv::cuda::GpuMat get_image(const int &level = 0) const;
