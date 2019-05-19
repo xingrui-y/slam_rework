@@ -316,7 +316,6 @@ __global__ void update_map_with_colour_kernel(MapStruct map_struct,
 
         // update colour
         auto colour_new = image.ptr(v)[u];
-        int colour_w_p = voxel.rgb_w_;
         auto colour_p = voxel.rgb_;
 
         if (weight_p == 0)

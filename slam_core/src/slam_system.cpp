@@ -201,9 +201,8 @@ void SlamSystem::SlamSystemImpl::update(const cv::Mat &image, const cv::Mat &dep
     mapping_->update(reference_image);
     mapping_->raycast(reference_image);
     reference_image->resize_device_map();
-    // cv::cuda::GpuMat rendered_image = reference_image->get_rendered_image();
-
-    cv::cuda::GpuMat rendered_image = reference_image->get_rendered_scene_textured();
+    cv::cuda::GpuMat rendered_image = reference_image->get_rendered_image();
+    // cv::cuda::GpuMat rendered_image = reference_image->get_rendered_scene_textured();
 
     // vis->upload(reference_image->get_reference_frame(), intrinsics_pyr_);
     // mapping_->raycast(vis);
@@ -229,8 +228,8 @@ void SlamSystem::SlamSystemImpl::update(const cv::Mat &image, const cv::Mat &dep
     cv::cvtColor(img2, intensity1, cv::COLOR_RGB2GRAY);
 
     // cv::Sobel(img2, dx, CV_8UC1, 1, 0);
-    cv::resize(intensity1, intensity1, cv::Size(0, 0), 2, 2);
-    cv::imshow("img2", intensity1);
+    // cv::resize(intensity1, intensity1, cv::Size(0, 0), 2, 2);
+    // cv::imshow("img2", intensity1);
 
     // cv::cvtColor(img, img, cv::COLOR_RGBA2BGR);
     // recorder.add_frame(img);
@@ -239,11 +238,11 @@ void SlamSystem::SlamSystemImpl::update(const cv::Mat &image, const cv::Mat &dep
     // cv::resize(img2, img2, cv::Size(0, 0), 2, 2);
     // cv::imshow("img2", img2);
 
-    cv::Mat img3(current_frame_->get_image());
-    cv::Mat intensity2;
-    cv::cvtColor(img3, intensity2, cv::COLOR_RGB2GRAY);
-    cv::resize(intensity2, intensity2, cv::Size(0, 0), 2, 2);
-    cv::imshow("img3", intensity2);
+    // cv::Mat img3(current_frame_->get_image());
+    // cv::Mat intensity2;
+    // cv::cvtColor(img3, intensity2, cv::COLOR_RGB2GRAY);
+    // cv::resize(intensity2, intensity2, cv::Size(0, 0), 2, 2);
+    // cv::imshow("img3", intensity2);
 
     cv::waitKey(1);
 

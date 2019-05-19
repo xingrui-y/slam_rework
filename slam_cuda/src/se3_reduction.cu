@@ -617,7 +617,7 @@ public:
 
         // reference point
         pt = last_vmap.ptr(y)[x];
-        if (pt.w < 0)
+        if (isnan(pt.x) || pt.w < 0)
             return false;
 
         // reference point in curr frame
@@ -629,20 +629,30 @@ public:
         if (!isfinite(last_val))
             return false;
 
-        int u = __float2int_rd(fx * pt.x / pt.z + cx + 0.5f);
-        int v = __float2int_rd(fy * pt.y / pt.z + cy + 0.5f);
+        auto u = fx * pt.x / pt.z + cx;
+        auto v = fy * pt.y / pt.z + cy;
         if (u >= 1 && v >= 1 && u <= cols - 2 && v <= rows - 2)
         {
-
-            // TODO : interpolation
-            curr_val = curr_intensity.ptr(v)[u];
-            dx = curr_intensity_dx.ptr(v)[u];
-            dy = curr_intensity_dy.ptr(v)[u];
+            curr_val = interpolate_bilinear(curr_intensity, u, v);
+            dx = interpolate_bilinear(curr_intensity_dx, u, v);
+            dy = interpolate_bilinear(curr_intensity_dy, u, v);
 
             // point selection criteria
             // TODO : Optimise this
-            return (dx > 0 || dy > 0) && isfinite(curr_val);
+            return (dx > 2 || dy > 2) &&
+                   isfinite(curr_val) &&
+                   isfinite(dx) && isfinite(dy);
         }
+
+        return false;
+    }
+
+    __device__ float interpolate_bilinear(cv::cuda::PtrStep<float> image, float &x, float &y) const
+    {
+        int u = floor(x), v = floor(y);
+        float coeff_x = x - u, coeff_y = y - v;
+        return (image.ptr(v)[u] * (1 - coeff_x) + image.ptr(v)[u + 1] * coeff_x) * (1 - coeff_y) +
+               (image.ptr(v + 1)[u] * (1 - coeff_x) + image.ptr(v + 1)[u + 1] * coeff_x) * coeff_y;
     }
 
     __device__ __inline__ void operator()() const
@@ -680,54 +690,89 @@ public:
 
 class ComputeLeastSquaresRGB
 {
-    // public:
-    //     __device__ inline float compute_jacobian(const int &k, float *j) const
-    //     {
-    //         float row[7] = {0, 0, 0, 0, 0, 0, 0};
+    __device__ void compute_jacobian(int &k, float *sum)
+    {
+        float row[7] = {0, 0, 0, 0, 0, 0, 0};
 
-    //         if (k < num_corresp)
-    //         {
-    //             float4 &image = array_image[k];
-    //             float4 &pt = array_point[k];
-    //         }
-    //     }
+        if (k < num_corresp)
+        {
+            float3 pt = make_float3(array_point[k]);
+            float4 image = array_image[k];
+            float3 left;
+            float z_inv = 1.0 / pt.z;
+            left.x = image.y * fx * z_inv;
+            left.y = image.w * fy * z_inv;
+            left.z = -(left.x * pt.x + left.y * pt.y) * z_inv;
+            row[6] = image.x - image.y;
 
-    //     __device__ __inline__ void operator()() const
-    //     {
-    //         float sum[29] = {0, 0, 0, 0, 0,
-    //                          0, 0, 0, 0, 0,
-    //                          0, 0, 0, 0, 0,
-    //                          0, 0, 0, 0, 0,
-    //                          0, 0, 0, 0, 0,
-    //                          0, 0, 0, 0};
+            *(float3 *)&row[0] = left;
+            *(float3 *)&row[3] = cross(pt, left);
+        }
 
-    //         float val[29];
-    //         for (int k = blockIdx.x * blockDim.x + threadIdx.x; k < N; k += blockDim.x * gridDim.x)
-    //         {
-    //             compute_jacobian(k, val);
-    // #pragma unroll
-    //             for (int i = 0; i < 29; ++i)
-    //                 sum[i] += val[i];
-    //         }
+        int count = 0;
+        for (int i = 0; i < 7; ++i)
+            for (int j = i; j < 7; ++j)
+                sum[count++] = row[i] * row[j];
+    }
 
-    //         BlockReduce<float, 29>(sum);
+    __device__ __forceinline__ void operator()()
+    {
+        float sum[29] = {0, 0, 0, 0, 0, 0, 0, 0,
+                         0, 0, 0, 0, 0, 0, 0, 0,
+                         0, 0, 0, 0, 0, 0, 0, 0,
+                         0, 0, 0, 0, 0};
 
-    //         if (threadIdx.x == 0)
-    //         {
-    // #pragma unroll
-    //             for (int i = 0; i < 29; ++i)
-    //                 out.ptr(blockIdx.x)[i] = sum[i];
-    //         }
-    //     }
+        float val[29];
+        for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < num_corresp; i += blockDim.x * gridDim.x)
+        {
+            compute_jacobian(i, val);
+#pragma unroll
+            for (int j = 0; j < 29; ++j)
+                sum[j] += val[j];
+        }
+
+        BlockReduce<float, 29>(sum);
+
+        if (threadIdx.x == 0)
+#pragma unroll
+            for (int i = 0; i < 29; ++i)
+                out.ptr(blockIdx.x)[i] = sum[i];
+    }
 
     cv::cuda::PtrSz<float4> array_image;
     cv::cuda::PtrSz<float4> array_point;
+    cv::cuda::PtrStep<float> out;
     uint num_corresp;
-    float mean_val;
-
-private:
+    float fx, fy;
 };
 
-__global__ void compute_stddev(float4 *image_val, uint num_corresp, float mean)
+void compute_rgb_correspondence(const cv::cuda::GpuMat curr_intensity,
+                                const cv::cuda::GpuMat last_intensity,
+                                const cv::cuda::GpuMat curr_intensity_dx,
+                                const cv::cuda::GpuMat curr_intensity_dy,
+                                const cv::cuda::GpuMat last_vmap,
+                                const Sophus::SE3d pose,
+                                const IntrinsicMatrix K)
 {
+    auto rows = curr_intensity.rows;
+    auto cols = curr_intensity.cols;
+
+    SelectCorrespRGB rgb_struct;
+    rgb_struct.curr_intensity = curr_intensity;
+    rgb_struct.last_intensity = last_intensity;
+    rgb_struct.curr_intensity_dx = curr_intensity_dx;
+    rgb_struct.curr_intensity_dy = curr_intensity_dy;
+    rgb_struct.last_vmap = last_vmap;
+    rgb_struct.cx = K.cx;
+    rgb_struct.cy = K.cy;
+    rgb_struct.fx = K.fx;
+    rgb_struct.fy = K.fy;
+    rgb_struct.T_last_curr = pose;
+    rgb_struct.rows = rows;
+    rgb_struct.cols = cols;
+    rgb_struct.N = rows * cols;
+
+    safe_call(cudaMalloc(&rgb_struct.num_corresp, sizeof(uint)));
+    safe_call(cudaMalloc(&rgb_struct.array_image, sizeof(float4) * cols * rows));
+    safe_call(cudaMalloc(&rgb_struct.array_point, sizeof(float4) * cols * rows));
 }
